@@ -124,6 +124,11 @@ pub mod sundo {
         fn get_pointer(&self) -> usize;
         fn get_history_len(&self) -> usize;
         
+        /// Get entry at specific index without moving pointer.
+        /// 
+        /// Useful for comparing states or computing deltas.
+        fn peek_at(&self, index: usize) -> Option<&Payload>;
+        
         /// Export history as a snapshot for serialization.
         fn export_snapshot(&self) -> PersistentSnapshot<Payload>;
         
@@ -150,7 +155,7 @@ pub mod sundo {
     }
 
     // ============================================================================
-    // Serialization Support (without dependency on serde)
+    // Serialization Support
     // ============================================================================
 
     /// Snapshot of UndoRedo history for serialization.
@@ -218,6 +223,11 @@ pub mod sundo {
         fn go_to(&mut self, index: usize) -> Option<Rc<Payload>>;
         fn get_pointer(&self) -> usize;
         fn get_history_len(&self) -> usize;
+        
+        /// Get entry at specific index without moving pointer.
+        /// 
+        /// Useful for comparing states or computing deltas.
+        fn peek_at(&self, index: usize) -> Option<Rc<Payload>>;
         
         /// Export history as a snapshot for serialization.
         /// 
@@ -379,6 +389,10 @@ pub mod sundo {
         
         fn get_history_len(&self) -> usize {
             self.history.len()
+        }
+        
+        fn peek_at(&self, index: usize) -> Option<Rc<Payload>> {
+            self.history.get(index).map(|e| Rc::clone(&e.payload))
         }
         
         fn export_snapshot(&self) -> Snapshot<Payload> {
@@ -562,6 +576,10 @@ pub mod sundo {
         
         fn get_history_len(&self) -> usize {
             self.history.len()
+        }
+        
+        fn peek_at(&self, index: usize) -> Option<&Payload> {
+            self.history.get(index).map(|e| &e.payload)
         }
         
         fn export_snapshot(&self) -> PersistentSnapshot<Payload> {

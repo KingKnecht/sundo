@@ -100,6 +100,21 @@ Shows how to serialize/deserialize undo/redo history without requiring serde.
 
 ---
 
+### delta-example
+Shows how to compute deltas (diffs) between any two states in history.
+
+**Topics covered:**
+- Implementing Diffable trait for custom types
+- Using peek_at() to access states without moving pointer
+- Computing deltas between consecutive states
+- Comparing arbitrary states
+- Generating changelogs from deltas
+- Audit trails and conflict resolution
+
+**Run:** `cd delta-example && cargo run`
+
+---
+
 ## Future Demos
 
 These demos are planned for future development:
@@ -110,7 +125,7 @@ These demos are planned for future development:
 
 ## Summary
 
-Currently available: **6 demos** covering basic usage, persistent data structures, transactions, history limits, memory analysis, and serialization.
+Currently available: **7 demos** covering basic usage, persistent data structures, transactions, history limits, memory analysis, serialization, and delta computation.
 
 ## Contributing
 
