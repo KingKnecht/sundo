@@ -1,0 +1,10 @@
+[package]
+name = "todo_app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sundo = { path = "../.." }
+im = "15.1"
+ratatui = "0.30.0"
+crossterm = "0.29.0"
