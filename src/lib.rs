@@ -1,7 +1,5 @@
 //#[allow(dead_code)] //Do not complain about unused structs etc.
 
-pub mod mem_performance_test;
-
 pub mod sundo {
     use std::rc::Rc;
 

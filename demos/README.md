@@ -11,6 +11,8 @@ cd basic-example
 cargo run --release
 ```
 
+**Note:** Memory-intensive demos should use `--release` for accurate measurements.
+
 ## Available Demos
 
 ### basic-example
@@ -67,13 +69,34 @@ Shows history limit configuration and builder pattern usage.
 
 ---
 
+### mem-performance
+Comprehensive memory performance tests measuring allocation patterns and efficiency.
+
+**Topics covered:**
+- Memory usage tracking
+- Rc sharing efficiency
+- Vec vs im::Vector memory comparison
+- Structural sharing benefits
+- Transaction memory impact
+- History memory overhead
+
+**Run:** `cd mem-performance && cargo run --release`
+
+**Note:** Use `--release` flag for accurate memory measurements.
+
+---
+
 ## Future Demos
 
 These demos are planned for future development:
 
-- **todolist-app** - Complete todo list application using sundo
+- **todolist-app** - Complete terminal-based todo list application using sundo
 - **text-editor** - Simple text editor with undo/redo
 - **canvas-app** - Graphics canvas with state management
+
+## Summary
+
+Currently available: **5 demos** covering basic usage, persistent data structures, transactions, history limits, and memory analysis.
 
 ## Contributing
 

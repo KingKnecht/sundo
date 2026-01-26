@@ -1,0 +1,8 @@
+[package]
+name = "mem-performance"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sundo = { path = "../.." }
+im = "15.1"

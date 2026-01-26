@@ -1,6 +1,13 @@
+/// Memory Performance Tests Demo
+/// 
+/// This demo runs various memory performance tests for the sundo library.
+/// These tests measure memory usage patterns for different undo/redo scenarios.
+/// 
+/// IMPORTANT: Run with --release flag for accurate measurements!
+
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::sundo::{Actions, UndoRedo};
+use sundo::{Actions, UndoRedo};
 use im::Vector as ImVector;
 
 // Custom allocator to track memory usage
@@ -45,21 +52,19 @@ fn format_bytes(bytes: usize) -> String {
 // Large model struct (~100MB when filled with data)
 #[derive(Clone, Debug)]
 struct LargeModel {
-    // Vector with ~25M elements = ~100MB (4 bytes per i32)
     data: Vec<i32>,
     version: u32,
 }
 
 impl LargeModel {
     fn new(size_mb: usize) -> Self {
-        let elements = (size_mb * 1024 * 1024) / 4; // 4 bytes per i32
+        let elements = (size_mb * 1024 * 1024) / 4;
         let data: Vec<i32> = (0..elements as i32).collect();
         Self { data, version: 0 }
     }
 
     fn modify(&self, increment: i32) -> Self {
         let mut new_data = self.data.clone();
-        // Modify first 1000 elements
         for i in 0..1000.min(new_data.len()) {
             new_data[i] += increment;
         }
@@ -74,14 +79,42 @@ impl LargeModel {
     }
 }
 
-pub fn run_memory_test() {
+// Immutable model using im::Vector with structural sharing
+#[derive(Clone, Debug)]
+struct ImmutableModel {
+    data: ImVector<i32>,
+    version: u32,
+}
+
+impl ImmutableModel {
+    fn new(size_mb: usize) -> Self {
+        let elements = (size_mb * 1024 * 1024) / 4;
+        let data: ImVector<i32> = (0..elements as i32).collect();
+        Self { data, version: 0 }
+    }
+
+    fn modify(&self, increment: i32) -> Self {
+        let mut new_data = self.data.clone();
+        for i in 0..1000.min(new_data.len()) {
+            new_data[i] += increment;
+        }
+        Self {
+            data: new_data,
+            version: self.version + 1,
+        }
+    }
+
+    fn size_estimate(&self) -> usize {
+        self.data.len() * std::mem::size_of::<i32>()
+    }
+}
+
+fn run_memory_test() {
     println!("=== Memory Performance Test ===\n");
     
-    // Baseline memory
     let baseline = get_allocated_bytes();
     println!("Baseline memory: {}", format_bytes(baseline));
     
-    // Create initial model (~100MB)
     println!("\n--- Creating 100MB model ---");
     let model = LargeModel::new(100);
     let after_model = get_allocated_bytes();
@@ -91,7 +124,6 @@ pub fn run_memory_test() {
              format_bytes(model_size));
     println!("Model estimate: {}", format_bytes(model.size_estimate()));
     
-    // Create UndoRedo and push initial state
     println!("\n--- Push initial state to UndoRedo ---");
     let mut undo_redo = UndoRedo::<LargeModel>::new();
     undo_redo.push(model, "Initial state".to_string());
@@ -100,7 +132,6 @@ pub fn run_memory_test() {
              format_bytes(after_push),
              format_bytes(after_push - after_model));
     
-    // Push 5 modifications
     println!("\n--- Push 5 modifications ---");
     for i in 1..=5 {
         undo_redo.update(
@@ -117,7 +148,6 @@ pub fn run_memory_test() {
     println!("Average overhead per entry: {}", 
              format_bytes(mods_overhead / 5));
     
-    // Undo operations (should not change memory much due to Rc)
     println!("\n--- Undo 3 times ---");
     undo_redo.undo();
     undo_redo.undo();
@@ -131,7 +161,6 @@ pub fn run_memory_test() {
                  format_bytes(after_5_mods - after_undo)
              });
     
-    // Redo operations
     println!("\n--- Redo 2 times ---");
     undo_redo.redo();
     undo_redo.redo();
@@ -144,7 +173,6 @@ pub fn run_memory_test() {
                  format_bytes(after_undo - after_redo)
              });
     
-    // Push new change (should truncate future history and free memory)
     println!("\n--- Push new modification (truncates future) ---");
     let before_truncate = get_allocated_bytes();
     undo_redo.update(
@@ -158,7 +186,6 @@ pub fn run_memory_test() {
              format_bytes(before_truncate.saturating_sub(after_truncate)));
     println!("History length: {}", undo_redo.get_history_len());
     
-    // Test transactions
     println!("\n--- Test transaction (10 modifications) ---");
     let before_transaction = get_allocated_bytes();
     undo_redo.start_transaction();
@@ -181,7 +208,6 @@ pub fn run_memory_test() {
              format_bytes(during_transaction.saturating_sub(after_transaction)));
     println!("History length after: {}", undo_redo.get_history_len());
     
-    // Test cancel transaction
     println!("\n--- Test cancel transaction (5 modifications) ---");
     undo_redo.start_transaction();
     for i in 1..=5 {
@@ -198,7 +224,6 @@ pub fn run_memory_test() {
              format_bytes(after_cancel),
              format_bytes(before_cancel.saturating_sub(after_cancel)));
     
-    // Drop undo_redo and measure
     println!("\n--- Drop UndoRedo ---");
     let before_drop = get_allocated_bytes();
     drop(undo_redo);
@@ -215,20 +240,18 @@ pub fn run_memory_test() {
     println!("Total overhead: {}", format_bytes(during_transaction - baseline));
 }
 
-pub fn run_rc_sharing_test() {
+fn run_rc_sharing_test() {
     println!("\n\n=== Rc Sharing Test ===\n");
     println!("This test demonstrates that Rc avoids unnecessary copying\n");
     
     let baseline = get_allocated_bytes();
     
-    // Create a large model
-    let model = LargeModel::new(50); // 50MB
+    let model = LargeModel::new(50);
     let after_model = get_allocated_bytes();
     println!("Created 50MB model: {} (+{})", 
              format_bytes(after_model),
              format_bytes(after_model - baseline));
     
-    // Push to undo_redo
     let mut undo_redo = UndoRedo::<LargeModel>::new();
     let rc1 = undo_redo.push(model, "Initial".to_string());
     let after_push = get_allocated_bytes();
@@ -236,7 +259,6 @@ pub fn run_rc_sharing_test() {
              format_bytes(after_push),
              format_bytes(after_push - after_model));
     
-    // Get multiple references (should not increase memory significantly)
     let rc2 = undo_redo.present().unwrap();
     let after_rc2 = get_allocated_bytes();
     let rc3 = undo_redo.present().unwrap();
@@ -249,12 +271,10 @@ pub fn run_rc_sharing_test() {
              format_bytes(after_rc3),
              format_bytes(after_rc3 - after_rc2));
     
-    // Verify they point to same data
     println!("\nAll Rc pointers point to same data: {}", 
              std::rc::Rc::as_ptr(&rc1) == std::rc::Rc::as_ptr(&rc2) && 
              std::rc::Rc::as_ptr(&rc2) == std::rc::Rc::as_ptr(&rc3));
     
-    // Drop references
     drop(rc1);
     drop(rc2);
     drop(rc3);
@@ -264,10 +284,9 @@ pub fn run_rc_sharing_test() {
     println!("\nAfter dropping all: {}", format_bytes(final_mem));
 }
 
-pub fn run_comparison_test() {
+fn run_comparison_test() {
     println!("\n\n=== Comparison: With vs Without UndoRedo ===\n");
     
-    // Without UndoRedo - just keeping a vector of models
     println!("--- Without UndoRedo (Vec of models) ---");
     let baseline = get_allocated_bytes();
     
@@ -289,7 +308,6 @@ pub fn run_comparison_test() {
     
     drop(history_vec);
     
-    // With UndoRedo
     println!("\n--- With UndoRedo (using Rc) ---");
     let baseline = get_allocated_bytes();
     
@@ -325,43 +343,11 @@ pub fn run_comparison_test() {
              });
 }
 
-// Immutable model using im::Vector with structural sharing
-#[derive(Clone, Debug)]
-struct ImmutableModel {
-    data: ImVector<i32>,
-    version: u32,
-}
-
-impl ImmutableModel {
-    fn new(size_mb: usize) -> Self {
-        let elements = (size_mb * 1024 * 1024) / 4; // 4 bytes per i32
-        let data: ImVector<i32> = (0..elements as i32).collect();
-        Self { data, version: 0 }
-    }
-
-    fn modify(&self, increment: i32) -> Self {
-        let mut new_data = self.data.clone();
-        // Modify first 1000 elements
-        for i in 0..1000.min(new_data.len()) {
-            new_data[i] += increment;
-        }
-        Self {
-            data: new_data,
-            version: self.version + 1,
-        }
-    }
-
-    fn size_estimate(&self) -> usize {
-        self.data.len() * std::mem::size_of::<i32>()
-    }
-}
-
-pub fn run_immutable_comparison_test() {
+fn run_immutable_comparison_test() {
     println!("\n\n=== Immutable Vec vs Standard Vec Comparison ===\n");
     println!("This test compares memory usage of im::Vector (structural sharing)");
     println!("vs standard Vec (full copy on modification)\n");
     
-    // Test with standard Vec
     println!("--- Standard Vec (full copy on modify) ---");
     let baseline = get_allocated_bytes();
     
@@ -391,7 +377,6 @@ pub fn run_immutable_comparison_test() {
     
     drop(undo_redo_vec);
     
-    // Test with immutable Vector
     println!("\n--- Immutable im::Vector (structural sharing) ---");
     let baseline = get_allocated_bytes();
     
@@ -421,7 +406,6 @@ pub fn run_immutable_comparison_test() {
     
     drop(undo_redo_im);
     
-    // Summary
     println!("\n--- Comparison Summary ---");
     println!("Standard Vec total memory: {}", format_bytes(vec_total));
     println!("Immutable Vector total memory: {}", format_bytes(im_total));
@@ -445,7 +429,7 @@ pub fn run_immutable_comparison_test() {
     println!("reducing memory usage in undo/redo systems!");
 }
 
-pub fn run_detailed_immutable_test() {
+fn run_detailed_immutable_test() {
     println!("\n\n=== Detailed Immutable Vector Analysis ===\n");
     
     println!("Creating 50MB model with im::Vector...");
@@ -495,7 +479,6 @@ pub fn run_detailed_immutable_test() {
     println!("Overhead ratio: {:.2}x of base model", 
              total_overhead as f64 / (50.0 * 1024.0 * 1024.0));
     
-    // Test undo/redo doesn't change memory significantly
     println!("\n--- Testing Undo/Redo (Rc already shares data) ---");
     let before_undo = get_allocated_bytes();
     
@@ -516,3 +499,43 @@ pub fn run_detailed_immutable_test() {
              format_bytes(after_redo.saturating_sub(after_undo)));
 }
 
+fn main() {
+    println!("╔════════════════════════════════════════════════════════════════╗");
+    println!("║         Sundo Memory Performance Tests                        ║");
+    println!("╚════════════════════════════════════════════════════════════════╝");
+    println!();
+    
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("Test 1: Basic Memory Usage");
+    println!("═══════════════════════════════════════════════════════════════");
+    run_memory_test();
+    println!();
+    
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("Test 2: Rc Sharing Efficiency");
+    println!("═══════════════════════════════════════════════════════════════");
+    run_rc_sharing_test();
+    println!();
+    
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("Test 3: Vec vs im::Vector Comparison");
+    println!("═══════════════════════════════════════════════════════════════");
+    run_comparison_test();
+    println!();
+    
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("Test 4: Immutable Structure Comparison");
+    println!("═══════════════════════════════════════════════════════════════");
+    run_immutable_comparison_test();
+    println!();
+    
+    println!("═══════════════════════════════════════════════════════════════");
+    println!("Test 5: Detailed Immutable Analysis");
+    println!("═══════════════════════════════════════════════════════════════");
+    run_detailed_immutable_test();
+    println!();
+    
+    println!("╔════════════════════════════════════════════════════════════════╗");
+    println!("║ All tests completed!                                          ║");
+    println!("╚════════════════════════════════════════════════════════════════╝");
+}
