@@ -160,8 +160,8 @@ mod tests {
         let success = undo_redo.end_transaction("Add 3".to_string());
         assert!(success);
         
-        // Transaction should collapse to single entry
-        assert_eq!(undo_redo.get_history_len(), 1);
+        // Transaction should collapse to 2 entries: initial + transaction result
+        assert_eq!(undo_redo.get_history_len(), 2);
         let present = undo_redo.present().unwrap();
         assert_eq!(*present, 3);
     }
@@ -218,8 +218,8 @@ mod tests {
         
         undo_redo.end_transaction("Transaction".to_string());
         
-        // Should still collapse everything from first start
-        assert_eq!(undo_redo.get_history_len(), 1);
+        // Should collapse to 2 entries: initial + transaction result
+        assert_eq!(undo_redo.get_history_len(), 2);
         let present = undo_redo.present().unwrap();
         assert_eq!(*present, 3);
     }
@@ -381,12 +381,101 @@ mod tests {
         undo_redo.update(|x| x + 1, "Inc".to_string());
         undo_redo.end_transaction("Add 2".to_string());
         
-        assert_eq!(undo_redo.get_history_len(), 1);
+        assert_eq!(undo_redo.get_history_len(), 2);
         let present = undo_redo.present().unwrap();
         assert_eq!(*present, 3);
         
-        // Can't undo because transaction collapsed to the starting point
-        assert!(!undo_redo.can_undo());
+        // Should be able to undo to state before transaction
+        assert!(undo_redo.can_undo());
+        undo_redo.undo();
+        let present = undo_redo.present().unwrap();
+        assert_eq!(*present, 1);
+    }
+
+    #[test]
+    fn test_transaction_does_not_overwrite_previous_state() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        
+        // Step 1: Add initial state
+        undo_redo.push(0, "Initial".to_string());
+        
+        // Step 2: Add an item (state before transaction)
+        undo_redo.update(|x| x + 10, "Add 10".to_string());
+        assert_eq!(*undo_redo.present().unwrap(), 10);
+        
+        // Step 3: Start transaction
+        undo_redo.start_transaction();
+        
+        // Step 4: Add another item inside transaction
+        undo_redo.update(|x| x + 5, "Add 5".to_string());
+        
+        // Step 5: End transaction
+        undo_redo.end_transaction("Transaction: Add 5".to_string());
+        
+        // Should have 3 states: initial, +10, transaction
+        assert_eq!(undo_redo.get_history_len(), 3);
+        assert_eq!(*undo_redo.present().unwrap(), 15);
+        
+        // Step 6: Undo - should go back to state before transaction (10)
+        undo_redo.undo();
+        let present = undo_redo.present().unwrap();
+        assert_eq!(*present, 10, "First added item should still exist after undo");
+        
+        // Should still be able to undo to initial state
+        assert!(undo_redo.can_undo());
+        undo_redo.undo();
+        assert_eq!(*undo_redo.present().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_persistent_transaction_does_not_overwrite_previous_state() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        
+        // Step 1: Add initial state
+        undo_redo.push(Vector::new(), "Initial".to_string());
+        
+        // Step 2: Add an item (state before transaction)
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(1);
+            new_v
+        }, "Add 1".to_string());
+        assert_eq!(undo_redo.present().unwrap().len(), 1);
+        
+        // Step 3: Start transaction
+        undo_redo.start_transaction();
+        
+        // Step 4: Add items inside transaction
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(2);
+            new_v
+        }, "Add 2".to_string());
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(3);
+            new_v
+        }, "Add 3".to_string());
+        
+        // Step 5: End transaction
+        undo_redo.end_transaction("Transaction: Add 2,3".to_string());
+        
+        // Should have 3 states: initial, +1, transaction
+        assert_eq!(undo_redo.get_history_len(), 3);
+        assert_eq!(undo_redo.present().unwrap().len(), 3);
+        
+        // Step 6: Undo - should go back to state before transaction ([1])
+        undo_redo.undo();
+        let present = undo_redo.present().unwrap();
+        assert_eq!(present.len(), 1, "First added item should still exist after undo");
+        assert_eq!(present[0], 1);
+        
+        // Should still be able to undo to initial state
+        assert!(undo_redo.can_undo());
+        undo_redo.undo();
+        assert_eq!(undo_redo.present().unwrap().len(), 0);
     }
 
     #[test]
@@ -572,7 +661,7 @@ mod tests {
         }, "Add 3".to_string());
         undo_redo.end_transaction("Batch add".to_string());
         
-        assert_eq!(undo_redo.get_history_len(), 1);
+        assert_eq!(undo_redo.get_history_len(), 2);
         let current = undo_redo.present().unwrap();
         assert_eq!(current.len(), 3);
     }
@@ -775,7 +864,7 @@ mod scoped_transaction_tests {
         }
         
         assert_eq!(*undo_redo.present().unwrap(), 10);
-        assert_eq!(undo_redo.get_history_len(), 1);  // Single transaction entry
+        assert_eq!(undo_redo.get_history_len(), 2);  // Initial + transaction result
     }
 
     #[test]
@@ -823,7 +912,7 @@ mod scoped_transaction_tests {
         
         let result = undo_redo.present().unwrap();
         assert_eq!(result.len(), 3);
-        assert_eq!(undo_redo.get_history_len(), 1);
+        assert_eq!(undo_redo.get_history_len(), 2);
     }
 
     #[test]

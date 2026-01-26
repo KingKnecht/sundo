@@ -470,13 +470,13 @@ pub mod sundo {
                     // Truncate to just after transaction start
                     self.history.truncate(start_pointer + 1);
                     
-                    // Replace with single entry containing final state
-                    self.history[start_pointer] = Entry {
+                    // Push new entry with the final transaction state
+                    self.history.push(Entry {
                         payload: final_state,
                         description,
-                    };
+                    });
                     
-                    self.pointer = start_pointer;
+                    self.pointer = start_pointer + 1;
                 }
                 true
             } else {
@@ -663,13 +663,13 @@ pub mod sundo {
                     // Truncate to just after transaction start
                     self.history.truncate(start_pointer + 1);
                     
-                    // Replace with single entry containing final state
-                    self.history[start_pointer] = PersistentEntry {
+                    // Push new entry with the final transaction state
+                    self.history.push(PersistentEntry {
                         payload: final_state,
                         description,
-                    };
+                    });
                     
-                    self.pointer = start_pointer;
+                    self.pointer = start_pointer + 1;
                 }
                 true
             } else {
