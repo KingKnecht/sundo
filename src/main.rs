@@ -1,6 +1,4 @@
-use crate::types::undo_redo::{Actions, UndoRedo};
-
-mod types;
+use undo_redo::sundo::{Actions, UndoRedo};
 
 #[derive(Clone, Debug)]
 struct Todo {
