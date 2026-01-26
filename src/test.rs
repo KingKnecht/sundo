@@ -479,6 +479,209 @@ mod tests {
     }
 
     #[test]
+    fn test_replace_current() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        undo_redo.push(10, "Initial".to_string());
+        undo_redo.update(|x| x + 5, "Add 5".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(*undo_redo.present().unwrap(), 15);
+        
+        // Replace current without adding to history
+        let result = undo_redo.replace_current(|x| x * 2).unwrap();
+        assert_eq!(*result, 30);
+        
+        // History length should not change
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(*undo_redo.present().unwrap(), 30);
+        
+        // Undo should go back to the first state
+        undo_redo.undo();
+        assert_eq!(*undo_redo.present().unwrap(), 10);
+    }
+
+    #[test]
+    fn test_replace_current_on_empty() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        let result = undo_redo.replace_current(|x| x + 1);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_persistent_replace_current() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        undo_redo.push(Vector::from(vec![1, 2, 3]), "Initial".to_string());
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(4);
+            new_v
+        }, "Add 4".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(undo_redo.present().unwrap().len(), 4);
+        
+        // Replace current - add element 5 without creating history
+        let result = undo_redo.replace_current(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(5);
+            new_v
+        }).unwrap();
+        
+        assert_eq!(result.len(), 5);
+        
+        // History length should not change
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(undo_redo.present().unwrap().len(), 5);
+        
+        // Undo should go back to the first state [1,2,3]
+        undo_redo.undo();
+        assert_eq!(undo_redo.present().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_replace_current_multiple_times() {
+        let mut undo_redo = UndoRedo::<String>::new();
+        undo_redo.push("initial".to_string(), "Initial".to_string());
+        
+        // Multiple in-place updates
+        undo_redo.replace_current(|s| format!("{}-a", s));
+        undo_redo.replace_current(|s| format!("{}-b", s));
+        undo_redo.replace_current(|s| format!("{}-c", s));
+        
+        // Still only one history entry
+        assert_eq!(undo_redo.get_history_len(), 1);
+        assert_eq!(*undo_redo.present().unwrap(), "initial-a-b-c");
+        
+        // Can't undo since we only have one state
+        assert!(!undo_redo.can_undo());
+    }
+
+    #[test]
+    fn test_replace_current_preserves_description() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        undo_redo.push(1, "First entry".to_string());
+        undo_redo.update(|x| x + 1, "Second entry".to_string());
+        
+        // Replace current
+        undo_redo.replace_current(|x| x * 10);
+        
+        // Check that descriptions are preserved
+        let history = undo_redo.get_history().unwrap();
+        assert_eq!(history[0].description, "First entry");
+        assert_eq!(history[1].description, "Second entry");
+        
+        // But the value has changed
+        assert_eq!(*undo_redo.present().unwrap(), 20);
+    }
+
+    #[test]
+    fn test_replace_current_with_navigation_example() {
+        use im::HashMap;
+        
+        #[derive(Clone, PartialEq, Debug)]
+        struct AppState {
+            data: HashMap<String, i32>,
+            current_page: String,
+        }
+        
+        impl Persistent for AppState {}
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let initial = AppState {
+            data: HashMap::new(),
+            current_page: "Home".to_string(),
+        };
+        undo_redo.push(initial, "Initial".to_string());
+        
+        // Add some data (undoable)
+        undo_redo.update(|state| {
+            AppState {
+                data: state.data.update("key1".to_string(), 100),
+                current_page: state.current_page.clone(),
+            }
+        }, "Add key1".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 2);
+        
+        // Change navigation (not undoable)
+        undo_redo.replace_current(|state| {
+            AppState {
+                data: state.data.clone(),
+                current_page: "Settings".to_string(),
+            }
+        });
+        
+        // History length unchanged
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(undo_redo.present().unwrap().current_page, "Settings");
+        
+        // Undo goes back to previous data state, but navigation stays
+        undo_redo.undo();
+        let state = undo_redo.present().unwrap();
+        assert_eq!(state.data.len(), 0);
+        // Note: current_page is "Home" because that was the navigation when this state was created
+        assert_eq!(state.current_page, "Home");
+    }
+
+    #[test]
+    fn test_replace_current_truncates_future() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        undo_redo.push(1, "First".to_string());
+        undo_redo.push(2, "Second".to_string());
+        undo_redo.push(3, "Third".to_string());
+        undo_redo.push(4, "Fourth".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 4);
+        
+        // Undo twice - now at state 2 with states 3 and 4 in future
+        undo_redo.undo();
+        undo_redo.undo();
+        assert_eq!(*undo_redo.present().unwrap(), 2);
+        assert!(undo_redo.can_redo());
+        assert_eq!(undo_redo.get_history_len(), 4);
+        
+        // Replace current - should truncate future history
+        undo_redo.replace_current(|x| x * 10);
+        
+        // Future should be gone
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert!(!undo_redo.can_redo());
+        assert_eq!(*undo_redo.present().unwrap(), 20);
+    }
+
+    #[test]
+    fn test_persistent_replace_current_truncates_future() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        undo_redo.push(Vector::from(vec![1]), "First".to_string());
+        undo_redo.push(Vector::from(vec![1, 2]), "Second".to_string());
+        undo_redo.push(Vector::from(vec![1, 2, 3]), "Third".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 3);
+        
+        // Undo - now at second state with third in future
+        undo_redo.undo();
+        assert_eq!(undo_redo.present().unwrap().len(), 2);
+        assert!(undo_redo.can_redo());
+        
+        // Replace current - should truncate future
+        undo_redo.replace_current(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(99);
+            new_v
+        });
+        
+        // Future should be gone
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert!(!undo_redo.can_redo());
+        assert_eq!(undo_redo.present().unwrap().len(), 3);
+        assert_eq!(undo_redo.present().unwrap()[2], 99);
+    }
+
+    #[test]
     fn test_rc_sharing() {
         let mut undo_redo = UndoRedo::<Vec<i32>>::new();
         let rc1 = undo_redo.push(vec![1, 2, 3], "Initial".to_string());

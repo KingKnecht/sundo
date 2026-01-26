@@ -255,6 +255,26 @@ pub mod sundo {
         fn update<F>(&mut self, f: F, description: String) -> Option<&Payload>
         where
             F: FnOnce(&Payload) -> Payload;
+        
+        /// Update the current state in-place without adding to history.
+        /// 
+        /// Useful for ephemeral state changes that shouldn't be undoable,
+        /// such as navigation, UI state, or selection changes.
+        /// 
+        /// # Examples
+        /// 
+        /// ```ignore
+        /// // Update navigation without creating undo history
+        /// app_state.replace_current(|state| {
+        ///     let mut new_state = state.clone();
+        ///     new_state.current_page = Page::Settings;
+        ///     new_state
+        /// });
+        /// ```
+        fn replace_current<F>(&mut self, f: F) -> Option<&Payload>
+        where
+            F: FnOnce(&Payload) -> Payload;
+        
         fn start_transaction(&mut self);
         fn end_transaction(&mut self, description: String) -> bool;
         fn cancel_transaction(&mut self) -> bool;
@@ -363,6 +383,26 @@ pub mod sundo {
         fn update<F>(&mut self, f: F, description: String) -> Option<Rc<Payload>>
         where
             F: FnOnce(&Payload) -> Payload;
+        
+        /// Update the current state in-place without adding to history.
+        /// 
+        /// Useful for ephemeral state changes that shouldn't be undoable,
+        /// such as navigation, UI state, or selection changes.
+        /// 
+        /// # Examples
+        /// 
+        /// ```ignore
+        /// // Update navigation without creating undo history
+        /// app_state.replace_current(|state| {
+        ///     let mut new_state = state.clone();
+        ///     new_state.current_page = Page::Settings;
+        ///     new_state
+        /// });
+        /// ```
+        fn replace_current<F>(&mut self, f: F) -> Option<Rc<Payload>>
+        where
+            F: FnOnce(&Payload) -> Payload;
+        
         fn start_transaction(&mut self);
         fn end_transaction(&mut self, description: String) -> bool;
         fn cancel_transaction(&mut self) -> bool;
@@ -453,6 +493,27 @@ pub mod sundo {
             let current = self.present()?;
             let new_payload = f(&current);
             Some(self.push(new_payload, description))
+        }
+        
+        fn replace_current<F>(&mut self, f: F) -> Option<Rc<Payload>>
+        where
+            F: FnOnce(&Payload) -> Payload,
+        {
+            let current = self.present()?;
+            let new_payload = f(&current);
+            let rc_payload = Rc::new(new_payload);
+            
+            // Truncate any future history (makes it consistent with push/update)
+            if !self.history.is_empty() && self.pointer + 1 < self.history.len() {
+                self.history.truncate(self.pointer + 1);
+            }
+            
+            // Replace the current entry in-place
+            if let Some(entry) = self.history.get_mut(self.pointer) {
+                entry.payload = Rc::clone(&rc_payload);
+            }
+            
+            Some(rc_payload)
         }
         
         fn start_transaction(&mut self) {
@@ -646,6 +707,27 @@ pub mod sundo {
             let current = self.present()?;
             let new_payload = f(current);  // Cheap clone via structural sharing!
             Some(self.push(new_payload, description))
+        }
+        
+        fn replace_current<F>(&mut self, f: F) -> Option<&Payload>
+        where
+            F: FnOnce(&Payload) -> Payload,
+        {
+            let current = self.present()?;
+            let new_payload = f(current);
+            
+            // Truncate any future history (makes it consistent with push/update)
+            if !self.history.is_empty() && self.pointer + 1 < self.history.len() {
+                self.history.truncate(self.pointer + 1);
+            }
+            
+            // Replace the current entry in-place
+            if let Some(entry) = self.history.get_mut(self.pointer) {
+                entry.payload = new_payload;
+            }
+            
+            // Return reference to the updated payload
+            self.history.get(self.pointer).map(|e| &e.payload)
         }
         
         fn start_transaction(&mut self) {
