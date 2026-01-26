@@ -117,10 +117,6 @@ undo_redo.push(0, "Initial".to_string());
 ### Core Types
 
 - **`UndoRedo<T>`** - Standard implementation for any cloneable type
-### Memory Estimation
-
-- **`MemoryFootprint`** - Trait for memory-based history limits
-
 - **`PersistentUndoRedo<T>`** - Optimized for `im::` types
 
 ### Builder Pattern
@@ -133,23 +129,28 @@ undo_redo.push(0, "Initial".to_string());
 - **`ScopedTransaction`** - RAII transaction with auto-rollback
 - **`PersistentScopedTransaction`** - Transaction for persistent types
 
+### Memory Estimation
+
+- **`MemoryFootprint`** - Trait for memory-based history limits
+
 ## Examples
 
 See the `demos/` directory for complete examples:
 
+- **basic-example** - Comparison of standard vs persistent implementations
+- **persistent-example** - Deep dive into persistent data structures  
+- **scoped-transaction** - Transaction patterns and error handling with RAII
+- **builder-pattern** - History limits configuration
 - **memory-limits** - Memory-based limits with MemoryFootprint trait
-- **mem-performance** - Memory performance testing and analysis
+- **mem-performance** - Comprehensive memory performance testing and analysis
 - **serialization-example** - Save/load history without serde
 - **delta-example** - Compute diffs between history states
 
 Run demos with:
 ```bash
 cd demos/basic-example && cargo run
-cd demos/memory-limits
-Run demos with:
-```bash
-cd demos/basic-example && cargo run
-cd demos/persistent-example && cargo run
+cd demos/memory-limits && cargo run
+cd demos/delta-example && cargo run
 # etc.
 ```
 
@@ -171,7 +172,12 @@ When using `im::Vector`, `im::HashMap`, etc., the library leverages their built-
 
 ## Documentation
 
-- [API Documentation](https://docs.rs/sundo)
+- [Usage Guide](docs/USAGE_GUIDE.md) - Comprehensive guide for choosing between UndoRedo and PersistentUndoRedo
+
+Generate API documentation locally:
+```bash
+cargo doc --open
+```
 
 ## Use Cases
 

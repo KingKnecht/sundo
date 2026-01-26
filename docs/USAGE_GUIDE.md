@@ -157,14 +157,196 @@ Built-in `MemoryFootprint` implementations exist for:
 - `String` and `Vec<T>`
 - Primitive numeric types (`i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `char`, etc.)
 
+## Advanced Features
 
+### Scoped Transactions (RAII Pattern)
 
-## Migration Path
+Transactions allow you to group multiple operations into a single undo/redo entry. Scoped transactions use RAII to automatically rollback if not explicitly committed:
 
-1. Start with `UndoRedo<T>` for prototyping
-2. Switch to `im` types for your payload when memory becomes a concern
-3. Change to `PersistentUndoRedo<T>` and add `impl Persistent` for maximum efficiency
-4. Update method signatures: `Rc<T>` → `&T`
+```rust
+use undo_redo::sundo::{Actions, UndoRedo, ScopedTransaction};
+
+let mut undo_redo = UndoRedo::new();
+undo_redo.push(0, "Initial".to_string());
+
+// Transaction that commits
+{
+    let mut tx = ScopedTransaction::begin(&mut undo_redo, "Batch update");
+    tx.get().update(|x| x + 1, "temp".to_string());
+    tx.get().update(|x| x + 2, "temp".to_string());
+    tx.get().update(|x| x + 3, "temp".to_string());
+    tx.commit();  // All 3 operations collapsed into "Batch update"
+}
+
+// Transaction that auto-rolls back (exception-safe)
+{
+    let mut tx = ScopedTransaction::begin(&mut undo_redo, "Risky operation");
+    tx.get().update(|x| x + 100, "temp".to_string());
+    // If panic or early return here, changes are automatically rolled back!
+    // Forgot to commit? Auto-rollback via Drop
+}
+```
+
+For persistent types, use `PersistentScopedTransaction`:
+
+```rust
+use im::Vector;
+use undo_redo::sundo::{PersistentActions, PersistentUndoRedo, PersistentScopedTransaction};
+
+let mut undo_redo = PersistentUndoRedo::new();
+undo_redo.push(Vector::new(), "Initial".to_string());
+
+{
+    let mut tx = PersistentScopedTransaction::begin(&mut undo_redo, "Add items");
+    tx.get().update(|v| {
+        let mut new_v = v.clone();
+        new_v.push_back(1);
+        new_v
+    }, "temp".to_string());
+    tx.get().update(|v| {
+        let mut new_v = v.clone();
+        new_v.push_back(2);
+        new_v
+    }, "temp".to_string());
+    tx.commit();
+}
+```
+
+**Benefits:**
+- Exception-safe: automatic rollback on panic or early return
+- Less boilerplate than manual `start_transaction()`/`end_transaction()`
+- Compiler ensures you don't forget to commit or cancel
+- Follows Rust RAII idioms (like `MutexGuard`)
+
+### Serialization Support
+
+Export and restore history without requiring serde:
+
+```rust
+use undo_redo::sundo::{Actions, UndoRedo};
+
+let mut undo_redo = UndoRedo::new();
+undo_redo.push(42, "Initial".to_string());
+undo_redo.update(|x| x + 10, "Add 10".to_string());
+
+// Export to snapshot
+let snapshot = undo_redo.export_snapshot();
+
+// Access snapshot data
+for (payload, description) in &snapshot.entries {
+    println!("Entry: {} = {}", description, payload);
+}
+
+// You can now serialize the snapshot with any serialization library
+// (serde, bincode, JSON, custom format, etc.)
+
+// Restore from snapshot
+let restored = UndoRedo::from_snapshot(snapshot);
+assert_eq!(*restored.present().unwrap(), 52);
+```
+
+The `Snapshot` type includes:
+- All history entries (payload + description pairs)
+- Current pointer position
+- Transaction state (if active)
+- History limits configuration
+- Memory tracking info (if enabled)
+
+This gives you complete control over serialization without imposing a specific format.
+
+### Inspecting History Without Moving
+
+Use `peek_at()` to examine any history state without changing the current pointer:
+
+```rust
+use undo_redo::sundo::{Actions, UndoRedo};
+
+let mut undo_redo = UndoRedo::new();
+undo_redo.push(0, "Initial".to_string());
+undo_redo.update(|x| x + 10, "Add 10".to_string());
+undo_redo.update(|x| x + 20, "Add 20".to_string());
+
+// Current state is 30
+assert_eq!(*undo_redo.present().unwrap(), 30);
+
+// Peek at earlier state without moving pointer
+let previous = undo_redo.peek_at(1).unwrap();
+assert_eq!(*previous, 10);
+
+// Current state unchanged
+assert_eq!(*undo_redo.present().unwrap(), 30);
+assert_eq!(undo_redo.get_pointer(), 2);
+```
+
+**Use cases:**
+- Displaying history preview in UI
+- Computing deltas between states
+- Comparing current state with previous versions
+- Building audit logs
+- Conflict detection
+
+### Delta Computation Pattern
+
+Combine `peek_at()` with custom logic to compute differences between states:
+
+```rust
+use undo_redo::sundo::{Actions, UndoRedo};
+
+// Define a custom type with delta computation
+#[derive(Clone, Debug, PartialEq)]
+struct Document {
+    content: String,
+    version: u32,
+}
+
+struct Delta {
+    from_version: u32,
+    to_version: u32,
+    changes: String,
+}
+
+fn compute_delta(from: &Document, to: &Document) -> Delta {
+    Delta {
+        from_version: from.version,
+        to_version: to.version,
+        changes: format!("Changed from '{}' to '{}'", from.content, to.content),
+    }
+}
+
+// Usage
+let mut undo_redo = UndoRedo::new();
+undo_redo.push(Document { content: "Hello".to_string(), version: 1 }, "Initial".to_string());
+undo_redo.update(
+    |d| Document { content: format!("{} World", d.content), version: d.version + 1 },
+    "Add World".to_string()
+);
+
+// Compute delta between consecutive states
+let prev = undo_redo.peek_at(0).unwrap();
+let curr = undo_redo.peek_at(1).unwrap();
+let delta = compute_delta(&prev, &curr);
+
+println!("Delta: {}", delta.changes);
+// Prints: "Changed from 'Hello' to 'Hello World'"
+```
+
+**Advanced: Generate changelog from all deltas**
+
+```rust
+fn generate_changelog(undo_redo: &UndoRedo<Document>) -> Vec<Delta> {
+    let mut deltas = Vec::new();
+    
+    for i in 0..undo_redo.get_history_len() - 1 {
+        let from = undo_redo.peek_at(i).unwrap();
+        let to = undo_redo.peek_at(i + 1).unwrap();
+        deltas.push(compute_delta(&from, &to));
+    }
+    
+    deltas
+}
+```
+
+See the `delta-example` demo for a complete implementation.
 
 ## Example: Text Editor State
 
