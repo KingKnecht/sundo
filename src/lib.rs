@@ -123,6 +123,12 @@ pub mod sundo {
         fn go_to(&mut self, index: usize) -> Option<&Payload>;
         fn get_pointer(&self) -> usize;
         fn get_history_len(&self) -> usize;
+        
+        /// Export history as a snapshot for serialization.
+        fn export_snapshot(&self) -> PersistentSnapshot<Payload>;
+        
+        /// Reconstruct from a snapshot.
+        fn from_snapshot(snapshot: PersistentSnapshot<Payload>) -> Self;
     }
 
     // ============================================================================
@@ -143,6 +149,57 @@ pub mod sundo {
         pub pointer : usize
     }
 
+    // ============================================================================
+    // Serialization Support (without dependency on serde)
+    // ============================================================================
+
+    /// Snapshot of UndoRedo history for serialization.
+    /// 
+    /// Extract this from an UndoRedo instance, serialize the payloads however you like,
+    /// then reconstruct the UndoRedo from the snapshot.
+    /// 
+    /// # Examples
+    /// 
+    /// ```ignore
+    /// // Export
+    /// let snapshot = undo_redo.export_snapshot();
+    /// let serialized: Vec<String> = snapshot.entries
+    ///     .iter()
+    ///     .map(|(payload, desc)| format!("{},{}", payload, desc))
+    ///     .collect();
+    /// 
+    /// // Import
+    /// let entries: Vec<(i32, String)> = serialized
+    ///     .iter()
+    ///     .map(|s| /* parse... */)
+    ///     .collect();
+    /// let restored = UndoRedo::from_snapshot(entries, snapshot.pointer, snapshot.max_entries);
+    /// ```
+    #[derive(Debug, Clone)]
+    pub struct Snapshot<T> {
+        /// All history entries as (payload, description) pairs
+        pub entries: Vec<(Rc<T>, String)>,
+        /// Current position in history
+        pub pointer: usize,
+        /// Active transaction start position, if any
+        pub transaction_start: Option<usize>,
+        /// Maximum entries limit, if any
+        pub max_entries: Option<usize>,
+    }
+
+    /// Snapshot for PersistentUndoRedo (no Rc wrapping).
+    #[derive(Debug, Clone)]
+    pub struct PersistentSnapshot<T: Persistent> {
+        /// All history entries as (payload, description) pairs
+        pub entries: Vec<(T, String)>,
+        /// Current position in history
+        pub pointer: usize,
+        /// Active transaction start position, if any
+        pub transaction_start: Option<usize>,
+        /// Maximum entries limit, if any
+        pub max_entries: Option<usize>,
+    }
+
     pub trait Actions<Payload> {
         fn new() -> Self;
         fn push(&mut self, value: Payload, description: String) -> Rc<Payload>;
@@ -161,6 +218,16 @@ pub mod sundo {
         fn go_to(&mut self, index: usize) -> Option<Rc<Payload>>;
         fn get_pointer(&self) -> usize;
         fn get_history_len(&self) -> usize;
+        
+        /// Export history as a snapshot for serialization.
+        /// 
+        /// Users can then serialize the payloads with their preferred method.
+        fn export_snapshot(&self) -> Snapshot<Payload>;
+        
+        /// Reconstruct UndoRedo from a snapshot.
+        /// 
+        /// This is a static method to create a new instance from exported data.
+        fn from_snapshot(snapshot: Snapshot<Payload>) -> Self;
     } 
 
     impl<Payload> Actions<Payload> for UndoRedo<Payload> {
@@ -312,6 +379,32 @@ pub mod sundo {
         
         fn get_history_len(&self) -> usize {
             self.history.len()
+        }
+        
+        fn export_snapshot(&self) -> Snapshot<Payload> {
+            Snapshot {
+                entries: self.history
+                    .iter()
+                    .map(|e| (Rc::clone(&e.payload), e.description.clone()))
+                    .collect(),
+                pointer: self.pointer,
+                transaction_start: self.transaction_start,
+                max_entries: self.max_entries,
+            }
+        }
+        
+        fn from_snapshot(snapshot: Snapshot<Payload>) -> Self {
+            let history = snapshot.entries
+                .into_iter()
+                .map(|(payload, description)| Entry { payload, description })
+                .collect();
+            
+            Self {
+                history,
+                pointer: snapshot.pointer,
+                transaction_start: snapshot.transaction_start,
+                max_entries: snapshot.max_entries,
+            }
         }
         
     }
@@ -469,6 +562,32 @@ pub mod sundo {
         
         fn get_history_len(&self) -> usize {
             self.history.len()
+        }
+        
+        fn export_snapshot(&self) -> PersistentSnapshot<Payload> {
+            PersistentSnapshot {
+                entries: self.history
+                    .iter()
+                    .map(|e| (e.payload.clone(), e.description.clone()))
+                    .collect(),
+                pointer: self.pointer,
+                transaction_start: self.transaction_start,
+                max_entries: self.max_entries,
+            }
+        }
+        
+        fn from_snapshot(snapshot: PersistentSnapshot<Payload>) -> Self {
+            let history = snapshot.entries
+                .into_iter()
+                .map(|(payload, description)| PersistentEntry { payload, description })
+                .collect();
+            
+            Self {
+                history,
+                pointer: snapshot.pointer,
+                transaction_start: snapshot.transaction_start,
+                max_entries: snapshot.max_entries,
+            }
         }
     }
 
@@ -812,16 +931,18 @@ pub mod sundo {
 // Re-export main API items at the root for convenience
 pub use sundo::{
     Actions, 
+    HistoryEntry,
     Persistent, 
     PersistentActions, 
+    PersistentSnapshot,
     PersistentUndoRedo, 
     PersistentUndoRedoBuilder,
     PersistentScopedTransaction,
     ScopedTransaction,
+    Snapshot,
+    Tenses,
     UndoRedo, 
     UndoRedoBuilder,
-    HistoryEntry,
-    Tenses,
 };
 
 #[cfg(test)]

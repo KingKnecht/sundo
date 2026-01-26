@@ -86,6 +86,20 @@ Comprehensive memory performance tests measuring allocation patterns and efficie
 
 ---
 
+### serialization-example
+Shows how to serialize/deserialize undo/redo history without requiring serde.
+
+**Topics covered:**
+- Export history to snapshots
+- Custom serialization formats
+- Reconstruct from snapshots
+- No serde dependency needed
+- Full control over serialization
+
+**Run:** `cd serialization-example && cargo run`
+
+---
+
 ## Future Demos
 
 These demos are planned for future development:
@@ -96,7 +110,7 @@ These demos are planned for future development:
 
 ## Summary
 
-Currently available: **5 demos** covering basic usage, persistent data structures, transactions, history limits, and memory analysis.
+Currently available: **6 demos** covering basic usage, persistent data structures, transactions, history limits, memory analysis, and serialization.
 
 ## Contributing
 

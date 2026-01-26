@@ -501,7 +501,7 @@ fn run_detailed_immutable_test() {
 
 fn main() {
     println!("╔════════════════════════════════════════════════════════════════╗");
-    println!("║         Sundo Memory Performance Tests                        ║");
+    println!("║         Sundo Memory Performance Tests                         ║");
     println!("╚════════════════════════════════════════════════════════════════╝");
     println!();
     
@@ -536,6 +536,6 @@ fn main() {
     println!();
     
     println!("╔════════════════════════════════════════════════════════════════╗");
-    println!("║ All tests completed!                                          ║");
+    println!("║ All tests completed!                                           ║");
     println!("╚════════════════════════════════════════════════════════════════╝");
 }

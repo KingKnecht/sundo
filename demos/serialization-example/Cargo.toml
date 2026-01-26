@@ -1,0 +1,7 @@
+[package]
+name = "serialization-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sundo = { path = "../.." }
