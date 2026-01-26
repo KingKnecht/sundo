@@ -91,11 +91,11 @@ From benchmarks with 11 history entries:
 
 ## Both Support
 
-- ✅ Transactions (collapse multiple operations)
-- ✅ Undo/Redo navigation
-- ✅ History inspection
-- ✅ Go to specific history point
-- ✅ Custom descriptions for each change
+- Transactions (collapse multiple operations)
+- Undo/Redo navigation
+- History inspection
+- Go to specific history point
+- Custom descriptions for each change
 
 ## Migration Path
 

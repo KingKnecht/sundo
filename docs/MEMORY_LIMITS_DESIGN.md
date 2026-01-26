@@ -6,14 +6,14 @@ Add optional memory-based limits to prevent unbounded history growth in applicat
 
 ## Status
 
-**Phase 1 (Count-based limits): ✅ IMPLEMENTED**  
+**Phase 1 (Count-based limits): IMPLEMENTED**  
 - `UndoRedoBuilder` with `with_max_entries()` method
 - `PersistentUndoRedoBuilder` with same functionality
 - Automatic pruning of oldest entries when limit exceeded
 - 10 comprehensive tests added
 - Example demonstrating all use cases
 
-**Phase 2 (Memory-based limits): ⚪ Not yet implemented**  
+**Phase 2 (Memory-based limits): Not yet implemented**  
 - Would add `MemoryFootprint` trait and memory-based tracking
 
 ## Design Goals
@@ -310,11 +310,11 @@ fn test_memory_limit_pruning() {
 
 Memory-based history limits provide:
 
-✅ **Control**: Prevent unbounded memory growth  
-✅ **Flexibility**: Choose count-based, memory-based, or both  
-✅ **Transparency**: Users can implement trait for accurate estimation  
-✅ **Performance**: Only track when configured  
-✅ **Safety**: Automatic pruning prevents OOM situations  
+**Control**: Prevent unbounded memory growth  
+**Flexibility**: Choose count-based, memory-based, or both  
+**Transparency**: Users can implement trait for accurate estimation  
+**Performance**: Only track when configured  
+**Safety**: Automatic pruning prevents OOM situations  
 
 This feature would be especially valuable for:
 - Long-running applications (editors, graphic tools)

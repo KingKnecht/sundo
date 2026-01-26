@@ -51,7 +51,7 @@ pub trait UndoRedoExt<T>: Actions<T> {
 - UI components can easily show undo/redo button states
 - Example: Enable undo button when `can_undo()` (already exists!)
 
-## 2. Scoped Transactions (RAII Pattern) ✅ **IMPLEMENTED**
+## 2. Scoped Transactions (RAII Pattern) **IMPLEMENTED**
 
 ### Automatic Rollback
 ```rust
@@ -323,22 +323,22 @@ pub trait HistoryExt<T>: Actions<T> {
 ## Implementation Priority
 
 ### Phase 1: Essential Helpers (High Value, Low Complexity)
-1. ⚪ Extension methods: `undo_n`, `redo_n` (note: `can_undo`, `can_redo` already exist)
-2. ✅ **Scoped transactions with RAII** - Implemented in src/lib.rs
-3. ⚪ State query methods: `undoable_count`, `redoable_count`
+1. Extension methods: `undo_n`, `redo_n` (note: `can_undo`, `can_redo` already exist)
+2. **Scoped transactions with RAII** - Implemented in src/lib.rs
+3. State query methods: `undoable_count`, `redoable_count`
 
 ### Phase 2: Type-Specific (High Value for im:: types)
-4. ⚪ VectorOps trait implementation
-5. ⚪ MapOps trait implementation
-6. ⚪ Field update macros
+4. VectorOps trait implementation
+5. MapOps trait implementation
+6. Field update macros
 
 ### Phase 3: Advanced Features (Lower Priority)
-7. ⚪ BatchUpdate builder
-8. ⚪ Checkpoint system
-9. ⚪ History inspection helpers
-10. ⚪ Builder pattern for UndoRedo construction
+7. BatchUpdate builder
+8. Checkpoint system
+9. History inspection helpers
+10. Builder pattern for UndoRedo construction
 
-**Legend**: ✅ Implemented | ⚪ Not yet implemented
+**Legend**: Implemented | Not yet implemented
 
 ## Real-World Examples
 
@@ -394,11 +394,11 @@ fn save_form(form: &Form, undo_redo: &mut UndoRedo<FormState>) -> Result<()> {
 
 Helper methods provide:
 
-✅ **Ergonomics**: Less boilerplate, more expressive code
-✅ **Safety**: RAII patterns prevent forgotten cleanup
-✅ **Discoverability**: IDE auto-complete shows available operations
-✅ **Type Safety**: Compile-time guarantees
-✅ **Composability**: Methods build on existing primitives
-✅ **Performance**: Zero-cost abstractions
+**Ergonomics**: Less boilerplate, more expressive code
+**Safety**: RAII patterns prevent forgotten cleanup
+**Discoverability**: IDE auto-complete shows available operations
+**Type Safety**: Compile-time guarantees
+**Composability**: Methods build on existing primitives
+**Performance**: Zero-cost abstractions
 
 The library becomes easier to use while maintaining the same powerful core functionality.

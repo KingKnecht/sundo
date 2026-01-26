@@ -422,7 +422,7 @@ fn run_immutable_comparison_test() {
                  format_bytes(overhead), percent);
     }
     
-    println!("\n🔍 Key Insight:");
+    println!("\nKey Insight:");
     println!("Immutable data structures use 'structural sharing' - when you");
     println!("modify part of the data, only the changed parts are copied.");
     println!("Unchanged parts are shared between versions, dramatically");

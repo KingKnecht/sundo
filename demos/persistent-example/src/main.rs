@@ -141,7 +141,7 @@ fn main() {
         }
     }
     
-    println!("\n💡 Key benefit: Even though we have 6+ history entries,");
+    println!("\nKey benefit: Even though we have 6+ history entries,");
     println!("   most of the data is shared between versions thanks to");
     println!("   structural sharing in im::Vector and im::HashMap!");
 }
