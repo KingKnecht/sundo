@@ -1,7 +1,14 @@
 [package]
-name = "undo_redo"
+name = "sundo"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT OR Apache-2.0"
+description = "Snapshot-based undo/redo library with support for persistent data structures"
+repository = "https://github.com/yourusername/sundo"
+keywords = ["undo", "redo", "history", "snapshot", "persistent"]
+categories = ["data-structures", "algorithms"]
+readme = "README.md"
 
 [dependencies]
 im = "15.1"

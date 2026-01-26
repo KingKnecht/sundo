@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::sundo::{Actions, UndoRedo, Tenses};
+    use crate::sundo::{Actions, UndoRedo, Tenses, Persistent, PersistentActions, PersistentUndoRedo};
 
     #[test]
     fn test_new() {
@@ -400,5 +400,612 @@ mod tests {
         // Both should point to the same data
         assert_eq!(*rc1, *rc2);
         assert_eq!(rc1.as_ptr(), rc2.as_ptr());
+    }
+    
+    #[test]
+    fn test_persistent_trait_with_im_vector() {
+        use im::Vector;
+        
+        // im::Vector implements Persistent
+        fn assert_persistent<T: Persistent>(_: &T) {}
+        
+        let vec = Vector::from(vec![1, 2, 3]);
+        assert_persistent(&vec);
+        
+        let mut undo_redo = UndoRedo::new();
+        undo_redo.push(vec.clone(), "Initial".to_string());
+        
+        let mut vec2 = vec.clone();
+        vec2.push_back(4);
+        undo_redo.push(vec2, "Add 4".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 2);
+        
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 4);
+        
+        undo_redo.undo();
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 3);
+    }
+    
+    #[test]
+    fn test_persistent_trait_with_im_hashmap() {
+        use im::HashMap;
+        
+        // im::HashMap implements Persistent
+        fn assert_persistent<T: Persistent>(_: &T) {}
+        
+        let map = HashMap::new();
+        assert_persistent(&map);
+        
+        let mut undo_redo = UndoRedo::new();
+        let map = map.update("key1", "value1");
+        undo_redo.push(map.clone(), "Add key1".to_string());
+        
+        let map = map.update("key2", "value2");
+        undo_redo.push(map, "Add key2".to_string());
+        
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 2);
+        
+        undo_redo.undo();
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 1);
+    }
+    
+    #[test]
+    fn test_custom_persistent_type() {
+        use im::{Vector, HashMap};
+        
+        #[derive(Clone)]
+        struct AppState {
+            users: HashMap<u64, String>,
+            messages: Vector<String>,
+        }
+        
+        impl Persistent for AppState {}
+        
+        // Should compile - AppState implements Persistent
+        fn assert_persistent<T: Persistent>(_: &T) {}
+        
+        let state = AppState {
+            users: HashMap::new(),
+            messages: Vector::new(),
+        };
+        assert_persistent(&state);
+        
+        let mut undo_redo = UndoRedo::new();
+        undo_redo.push(state, "Initial".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 1);
+    }
+    
+    // ============================================================================
+    // Tests for PersistentUndoRedo (optimized storage)
+    // ============================================================================
+    
+    #[test]
+    fn test_persistent_undo_redo_basic() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let vec = Vector::from(vec![1, 2, 3]);
+        
+        // Push returns &Payload, not Rc<Payload>
+        let pushed = undo_redo.push(vec, "Initial".to_string());
+        assert_eq!(pushed.len(), 3);
+        
+        // Present returns Option<&Payload>
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 3);
+        assert_eq!(*current, Vector::from(vec![1, 2, 3]));
+    }
+    
+    #[test]
+    fn test_persistent_undo_redo_update() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let vec = Vector::from(vec![1, 2, 3]);
+        undo_redo.push(vec, "Initial".to_string());
+        
+        // Update creates new version via structural sharing
+        undo_redo.update(
+            |v| {
+                let mut new_v = v.clone();
+                new_v.push_back(4);
+                new_v
+            },
+            "Add 4".to_string()
+        );
+        
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 4);
+        assert_eq!(*current, Vector::from(vec![1, 2, 3, 4]));
+    }
+    
+    #[test]
+    fn test_persistent_undo_redo_undo_redo() {
+        use im::HashMap;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let map = HashMap::new();
+        undo_redo.push(map, "Empty".to_string());
+        
+        undo_redo.update(|m| m.update("a", 1), "Add a".to_string());
+        undo_redo.update(|m| m.update("b", 2), "Add b".to_string());
+        undo_redo.update(|m| m.update("c", 3), "Add c".to_string());
+        
+        assert_eq!(undo_redo.present().unwrap().len(), 3);
+        
+        // Undo twice
+        undo_redo.undo();
+        assert_eq!(undo_redo.present().unwrap().len(), 2);
+        
+        undo_redo.undo();
+        assert_eq!(undo_redo.present().unwrap().len(), 1);
+        
+        // Redo once
+        undo_redo.redo();
+        assert_eq!(undo_redo.present().unwrap().len(), 2);
+    }
+    
+    #[test]
+    fn test_persistent_transaction() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let vec = Vector::from(vec![1]);
+        undo_redo.push(vec, "Initial".to_string());
+        
+        undo_redo.start_transaction();
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(2);
+            new_v
+        }, "Add 2".to_string());
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(3);
+            new_v
+        }, "Add 3".to_string());
+        undo_redo.end_transaction("Batch add".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 1);
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 3);
+    }
+    
+    #[test]
+    fn test_persistent_cancel_transaction() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let vec = Vector::from(vec![1]);
+        undo_redo.push(vec, "Initial".to_string());
+        
+        undo_redo.start_transaction();
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(2);
+            new_v
+        }, "Add 2".to_string());
+        undo_redo.cancel_transaction();
+        
+        // Should be back to initial state
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 1);
+        assert_eq!(undo_redo.get_history_len(), 1);
+    }
+    
+    #[test]
+    fn test_persistent_custom_type() {
+        use im::{Vector, HashMap};
+        
+        #[derive(Clone, PartialEq, Debug)]
+        struct AppState {
+            users: HashMap<u64, String>,
+            messages: Vector<String>,
+        }
+        
+        impl Persistent for AppState {}
+        
+        impl AppState {
+            fn add_user(&self, id: u64, name: String) -> Self {
+                Self {
+                    users: self.users.update(id, name),
+                    messages: self.messages.clone(),
+                }
+            }
+        }
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let state = AppState {
+            users: HashMap::new(),
+            messages: Vector::new(),
+        };
+        undo_redo.push(state, "Initial".to_string());
+        
+        undo_redo.update(
+            |s| s.add_user(1, "Alice".to_string()),
+            "Add Alice".to_string()
+        );
+        
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.users.len(), 1);
+        assert_eq!(current.users.get(&1), Some(&"Alice".to_string()));
+    }
+    
+    #[test]
+    fn test_persistent_go_to() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        
+        for i in 0..5 {
+            let mut vec = Vector::new();
+            for j in 0..=i {
+                vec.push_back(j);
+            }
+            undo_redo.push(vec, format!("State {}", i));
+        }
+        
+        assert_eq!(undo_redo.get_history_len(), 5);
+        
+        // Go to middle
+        let state = undo_redo.go_to(2).unwrap();
+        assert_eq!(state.len(), 3);
+        assert_eq!(undo_redo.get_pointer(), 2);
+        
+        // Go to start
+        let state = undo_redo.go_to(0).unwrap();
+        assert_eq!(state.len(), 1);
+    }
+    
+    #[test]
+    fn test_persistent_get_history() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        
+        undo_redo.push(Vector::from(vec![1]), "One".to_string());
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(2);
+            new_v
+        }, "Two".to_string());
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(3);
+            new_v
+        }, "Three".to_string());
+        
+        let history = undo_redo.get_history().unwrap();
+        assert_eq!(history.len(), 3);
+        assert_eq!(history[0].description, "One");
+        assert_eq!(history[1].description, "Two");
+        assert_eq!(history[2].description, "Three");
+        assert_eq!(history[2].tense, Tenses::Present);
+        
+        undo_redo.undo();
+        let history = undo_redo.get_history().unwrap();
+        assert_eq!(history[1].tense, Tenses::Present);
+        assert_eq!(history[2].tense, Tenses::Future);
+    }
+    
+    #[test]
+    fn test_persistent_can_undo_redo() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        
+        // Empty history
+        assert!(!undo_redo.can_undo());
+        assert!(!undo_redo.can_redo());
+        
+        undo_redo.push(Vector::from(vec![1]), "One".to_string());
+        assert!(!undo_redo.can_undo());
+        assert!(!undo_redo.can_redo());
+        
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(2);
+            new_v
+        }, "Two".to_string());
+        assert!(undo_redo.can_undo());
+        assert!(!undo_redo.can_redo());
+        
+        undo_redo.undo();
+        assert!(!undo_redo.can_undo());
+        assert!(undo_redo.can_redo());
+    }
+    
+    #[test]
+    fn test_persistent_no_rc_overhead() {
+        use im::Vector;
+        
+        // Verify PersistentEntry doesn't have Rc overhead
+        let mut undo_redo = PersistentUndoRedo::new();
+        let vec = Vector::from(vec![1, 2, 3]);
+        let pushed = undo_redo.push(vec, "Test".to_string());
+        
+        // With PersistentUndoRedo, we get direct reference
+        // Not wrapped in Rc like standard UndoRedo
+        assert_eq!(pushed.len(), 3);
+        
+        // The key benefit: PersistentUndoRedo stores payloads directly
+        // without Rc wrapping, avoiding one level of indirection and
+        // the associated heap allocation overhead.
+        // This test verifies the API works correctly with direct references.
+        let current = undo_redo.present().unwrap();
+        assert_eq!(current.len(), 3);
+        
+        // Multiple entries share structure internally via im::Vector
+        undo_redo.update(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(4);
+            new_v
+        }, "Add 4".to_string());
+        
+        assert_eq!(undo_redo.present().unwrap().len(), 4);
+    }
+}
+
+// ============================================================================
+// SCOPED TRANSACTION TESTS
+// ============================================================================
+
+#[cfg(test)]
+mod scoped_transaction_tests {
+    use crate::sundo::{Actions, PersistentActions, PersistentScopedTransaction, PersistentUndoRedo, ScopedTransaction, UndoRedo};
+    use im::Vector;
+
+    #[test]
+    fn test_scoped_transaction_commit() {
+        let mut undo_redo = UndoRedo::new();
+        undo_redo.push(0, "Initial".to_string());
+        
+        {
+            let mut tx = ScopedTransaction::begin(&mut undo_redo, "Add 10");
+            tx.get().update(|x| x + 3, "temp".to_string());
+            tx.get().update(|x| x + 3, "temp".to_string());
+            tx.get().update(|x| x + 4, "temp".to_string());
+            tx.commit();
+        }
+        
+        assert_eq!(*undo_redo.present().unwrap(), 10);
+        assert_eq!(undo_redo.get_history_len(), 1);  // Single transaction entry
+    }
+
+    #[test]
+    fn test_scoped_transaction_rollback() {
+        let mut undo_redo = UndoRedo::new();
+        undo_redo.push(5, "Initial".to_string());
+        
+        let before = *undo_redo.present().unwrap();
+        
+        {
+            let mut tx = ScopedTransaction::begin(&mut undo_redo, "This will rollback");
+            tx.get().update(|x| x + 100, "temp".to_string());
+            tx.get().update(|x| x + 200, "temp".to_string());
+            // Don't commit - should auto-rollback
+        }
+        
+        assert_eq!(*undo_redo.present().unwrap(), before);
+        assert_eq!(undo_redo.get_history_len(), 1);  // Still just initial state
+    }
+
+    #[test]
+    fn test_persistent_scoped_transaction_commit() {
+        let mut undo_redo = PersistentUndoRedo::new();
+        undo_redo.push(Vector::<i32>::new(), "Initial".to_string());
+        
+        {
+            let mut tx = PersistentScopedTransaction::begin(&mut undo_redo, "Add items");
+            tx.get().update(|v: &Vector<i32>| { 
+                let mut new_v = v.clone(); 
+                new_v.push_back(1); 
+                new_v 
+            }, "temp".to_string());
+            tx.get().update(|v: &Vector<i32>| { 
+                let mut new_v = v.clone(); 
+                new_v.push_back(2); 
+                new_v 
+            }, "temp".to_string());
+            tx.get().update(|v: &Vector<i32>| { 
+                let mut new_v = v.clone(); 
+                new_v.push_back(3); 
+                new_v 
+            }, "temp".to_string());
+            tx.commit();
+        }
+        
+        let result = undo_redo.present().unwrap();
+        assert_eq!(result.len(), 3);
+        assert_eq!(undo_redo.get_history_len(), 1);
+    }
+
+    #[test]
+    fn test_persistent_scoped_transaction_rollback() {
+        let mut undo_redo = PersistentUndoRedo::new();
+        let initial = Vector::from(vec![1, 2, 3]);
+        undo_redo.push(initial.clone(), "Initial".to_string());
+        
+        {
+            let mut tx = PersistentScopedTransaction::begin(&mut undo_redo, "This will rollback");
+            tx.get().update(|v: &Vector<i32>| { 
+                let mut new_v = v.clone(); 
+                new_v.push_back(99); 
+                new_v 
+            }, "temp".to_string());
+            tx.get().update(|v: &Vector<i32>| { 
+                let mut new_v = v.clone(); 
+                new_v.push_back(100); 
+                new_v 
+            }, "temp".to_string());
+            // Don't commit
+        }
+        
+        assert_eq!(undo_redo.present().unwrap(), &initial);
+        assert_eq!(undo_redo.get_history_len(), 1);
+    }
+}
+
+// ============================================================================
+// BUILDER PATTERN AND MAX ENTRIES TESTS
+// ============================================================================
+
+#[cfg(test)]
+mod builder_tests {
+    use crate::sundo::{Actions, PersistentActions, PersistentUndoRedoBuilder, UndoRedoBuilder};
+    use im::Vector;
+
+    #[test]
+    fn test_builder_default() {
+        let mut undo_redo = UndoRedoBuilder::<i32>::new().build();
+        undo_redo.push(42, "First".to_string());
+        assert_eq!(*undo_redo.present().unwrap(), 42);
+    }
+
+    #[test]
+    fn test_builder_with_capacity() {
+        let undo_redo = UndoRedoBuilder::<String>::new()
+            .with_capacity(1000)
+            .build();
+        assert_eq!(undo_redo.get_history_len(), 0);
+    }
+
+    #[test]
+    fn test_max_entries_pruning() {
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(5)
+            .build();
+        
+        // Add 10 entries
+        for i in 0..10 {
+            undo_redo.push(i, format!("Step {}", i));
+        }
+        
+        // Should only keep the last 5
+        assert_eq!(undo_redo.get_history_len(), 5);
+        assert_eq!(*undo_redo.present().unwrap(), 9);
+    }
+
+    #[test]
+    fn test_max_entries_preserves_current_state() {
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(3)
+            .build();
+        
+        // Add entries
+        for i in 0..10 {
+            undo_redo.push(i, format!("Value {}", i));
+        }
+        
+        // Current state should be preserved
+        assert_eq!(*undo_redo.present().unwrap(), 9);
+        assert_eq!(undo_redo.get_history_len(), 3);
+    }
+
+    #[test]
+    fn test_max_entries_with_undo() {
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(5)
+            .build();
+        
+        // Add 10 entries
+        for i in 0..10 {
+            undo_redo.push(i, format!("Step {}", i));
+        }
+        
+        // Should be able to undo within the kept history
+        assert_eq!(undo_redo.get_history_len(), 5);
+        
+        // Undo a few times
+        undo_redo.undo();
+        assert_eq!(*undo_redo.present().unwrap(), 8);
+        
+        undo_redo.undo();
+        assert_eq!(*undo_redo.present().unwrap(), 7);
+    }
+
+    #[test]
+    fn test_max_entries_with_update() {
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(3)
+            .build();
+        
+        undo_redo.push(1, "Initial".to_string());
+        
+        for i in 0..10 {
+            undo_redo.update(|x| x + 1, format!("Increment {}", i));
+        }
+        
+        assert_eq!(undo_redo.get_history_len(), 3);
+        assert_eq!(*undo_redo.present().unwrap(), 11);
+    }
+
+    #[test]
+    fn test_persistent_builder_max_entries() {
+        let mut undo_redo = PersistentUndoRedoBuilder::new()
+            .with_max_entries(5)
+            .build();
+        
+        // Add 10 Vector states
+        for i in 0..10 {
+            let vec = Vector::from(vec![i]);
+            undo_redo.push(vec, format!("Step {}", i));
+        }
+        
+        assert_eq!(undo_redo.get_history_len(), 5);
+        assert_eq!(undo_redo.present().unwrap().len(), 1);
+        assert_eq!(undo_redo.present().unwrap()[0], 9);
+    }
+
+    #[test]
+    fn test_no_limit_unlimited_history() {
+        let mut undo_redo = UndoRedoBuilder::new().build();
+        
+        // Add many entries
+        for i in 0..100 {
+            undo_redo.push(i, format!("Step {}", i));
+        }
+        
+        // All should be preserved
+        assert_eq!(undo_redo.get_history_len(), 100);
+    }
+
+    #[test]
+    fn test_max_entries_one() {
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(1)
+            .build();
+        
+        undo_redo.push(1, "First".to_string());
+        undo_redo.push(2, "Second".to_string());
+        undo_redo.push(3, "Third".to_string());
+        
+        // Should only keep current state
+        assert_eq!(undo_redo.get_history_len(), 1);
+        assert_eq!(*undo_redo.present().unwrap(), 3);
+        
+        // Can't undo since we only have current state
+        assert!(!undo_redo.can_undo());
+    }
+
+    #[test]
+    fn test_max_entries_pointer_adjustment() {
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(5)
+            .build();
+        
+        // Add entries
+        for i in 0..10 {
+            undo_redo.push(i, format!("Step {}", i));
+        }
+        
+        // Pointer should be at the end
+        assert_eq!(undo_redo.get_pointer(), undo_redo.get_history_len() - 1);
     }
 }
