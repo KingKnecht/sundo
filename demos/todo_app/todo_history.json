@@ -1,0 +1,93 @@
+{
+  "entries": [
+    [
+      {
+        "todos": [],
+        "next_id": 1
+      },
+      "Init"
+    ],
+    [
+      {
+        "todos": [
+          {
+            "id": 1,
+            "text": "A",
+            "completed": false
+          }
+        ],
+        "next_id": 2
+      },
+      "Add todo"
+    ],
+    [
+      {
+        "todos": [
+          {
+            "id": 1,
+            "text": "A",
+            "completed": false
+          },
+          {
+            "id": 2,
+            "text": "B",
+            "completed": false
+          }
+        ],
+        "next_id": 3
+      },
+      "Add todo"
+    ],
+    [
+      {
+        "todos": [
+          {
+            "id": 1,
+            "text": "A",
+            "completed": false
+          },
+          {
+            "id": 2,
+            "text": "B",
+            "completed": false
+          },
+          {
+            "id": 3,
+            "text": "C",
+            "completed": false
+          }
+        ],
+        "next_id": 4
+      },
+      "Add todo"
+    ],
+    [
+      {
+        "todos": [
+          {
+            "id": 1,
+            "text": "A",
+            "completed": false
+          },
+          {
+            "id": 2,
+            "text": "B",
+            "completed": true
+          },
+          {
+            "id": 3,
+            "text": "C",
+            "completed": false
+          }
+        ],
+        "next_id": 4
+      },
+      "Toggle todo"
+    ]
+  ],
+  "pointer": 1,
+  "transaction_start": null,
+  "max_entries": null,
+  "max_memory_bytes": null,
+  "current_memory_bytes": 0
+}

@@ -1,6 +1,8 @@
-use sundo::{PersistentActions, PersistentUndoRedo, Persistent};
+use sundo::{PersistentActions, PersistentUndoRedo, Persistent, PersistentSnapshot};
 use im::Vector;
 use std::io;
+use std::fs;
+use serde::{Serialize, Deserialize};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
@@ -10,14 +12,14 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Todo {
     id: u32,
     text: String,
     completed: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct TodoState {
     todos: Vector<Todo>,
     next_id: u32,
@@ -84,6 +86,7 @@ struct App {
     input: String,
     selected_todo: Option<u32>,
     in_transaction: bool,
+    status_message: Option<String>,
 }
 
 impl Default for App {
@@ -95,11 +98,95 @@ impl Default for App {
             input: String::new(),
             selected_todo: None,
             in_transaction: false,
+            status_message: None,
         }
     }
 }
 
 impl App {
+    fn save_to_file(&mut self) {
+        const SAVE_FILE: &str = "todo_history.json";
+        
+        let snapshot = self.undo_redo.export_snapshot();
+        
+        // Create a serializable wrapper
+        #[derive(Serialize)]
+        struct SerializableSnapshot {
+            entries: Vec<(TodoState, String)>,
+            pointer: usize,
+            transaction_start: Option<usize>,
+            max_entries: Option<usize>,
+            max_memory_bytes: Option<usize>,
+            current_memory_bytes: usize,
+        }
+        
+        let serializable = SerializableSnapshot {
+            entries: snapshot.entries,
+            pointer: snapshot.pointer,
+            transaction_start: snapshot.transaction_start,
+            max_entries: snapshot.max_entries,
+            max_memory_bytes: snapshot.max_memory_bytes,
+            current_memory_bytes: snapshot.current_memory_bytes,
+        };
+        
+        match serde_json::to_string_pretty(&serializable) {
+            Ok(json) => {
+                match fs::write(SAVE_FILE, json) {
+                    Ok(_) => {
+                        self.status_message = Some(format!("Saved to {}", SAVE_FILE));
+                    }
+                    Err(e) => {
+                        self.status_message = Some(format!("Error saving: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Error serializing: {}", e));
+            }
+        }
+    }
+    
+    fn load_from_file(&mut self) {
+        const SAVE_FILE: &str = "todo_history.json";
+        
+        match fs::read_to_string(SAVE_FILE) {
+            Ok(json) => {
+                #[derive(Deserialize)]
+                struct SerializableSnapshot {
+                    entries: Vec<(TodoState, String)>,
+                    pointer: usize,
+                    transaction_start: Option<usize>,
+                    max_entries: Option<usize>,
+                    max_memory_bytes: Option<usize>,
+                    current_memory_bytes: usize,
+                }
+                
+                match serde_json::from_str::<SerializableSnapshot>(&json) {
+                    Ok(serializable) => {
+                        let snapshot = PersistentSnapshot {
+                            entries: serializable.entries,
+                            pointer: serializable.pointer,
+                            transaction_start: serializable.transaction_start,
+                            max_entries: serializable.max_entries,
+                            max_memory_bytes: serializable.max_memory_bytes,
+                            current_memory_bytes: serializable.current_memory_bytes,
+                        };
+                        
+                        self.undo_redo = PersistentUndoRedo::from_snapshot(snapshot);
+                        self.status_message = Some(format!("Loaded from {}", SAVE_FILE));
+                        self.selected_todo = None;
+                    }
+                    Err(e) => {
+                        self.status_message = Some(format!("Error parsing: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Error loading: {}", e));
+            }
+        }
+    }
+    
     fn run(mut self, mut terminal: DefaultTerminal) -> io::Result<()> {
         loop {
             terminal.draw(|frame| self.draw(frame))?;
@@ -110,9 +197,17 @@ impl App {
                         KeyCode::Char('q') | KeyCode::Esc => break,
                         KeyCode::Char('u') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                             self.undo_redo.undo();
+                            self.status_message = None;
                         }
                         KeyCode::Char('r') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                             self.undo_redo.redo();
+                            self.status_message = None;
+                        }
+                        KeyCode::Char('s') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                            self.save_to_file();
+                        }
+                        KeyCode::Char('l') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                            self.load_from_file();
                         }
                         KeyCode::Char('t') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
                             if self.in_transaction {
@@ -122,10 +217,12 @@ impl App {
                                 self.undo_redo.start_transaction();
                                 self.in_transaction = true;
                             }
+                            self.status_message = None;
                         }
                         KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && self.in_transaction => {
                             self.undo_redo.cancel_transaction();
                             self.in_transaction = false;
+                            self.status_message = None;
                         }
                         KeyCode::Enter => {
                             if !self.input.is_empty() {
@@ -133,6 +230,7 @@ impl App {
                                 self.undo_redo.update(|state| state.add_todo(text), "Add todo".to_string());
                                 self.input.clear();
                             }
+                            self.status_message = None;
                         }
                         KeyCode::Char(' ') => {
                             if let Some(id) = self.selected_todo {
@@ -140,6 +238,7 @@ impl App {
                             } else {
                                 self.input.push(' ');
                             }
+                            self.status_message = None;
                         }
                         KeyCode::Char('d') => {
                             if let Some(id) = self.selected_todo {
@@ -148,12 +247,15 @@ impl App {
                             } else {
                                 self.input.push('d');
                             }
+                            self.status_message = None;
                         }
                         KeyCode::Char(c) => {
                             self.input.push(c);
+                            self.status_message = None;
                         }
                         KeyCode::Backspace => {
                             self.input.pop();
+                            self.status_message = None;
                         }
                         KeyCode::Down => {
                             if let Some(state) = self.undo_redo.present() {
@@ -203,6 +305,7 @@ impl App {
             .constraints([
                 Constraint::Length(3),
                 Constraint::Min(0),
+                Constraint::Length(1),
             ])
             .split(area);
         
@@ -219,6 +322,16 @@ impl App {
             .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             .block(Block::default().borders(Borders::BOTTOM));
         frame.render_widget(title, main_layout[0]);
+        
+        // Status bar at bottom
+        let status_text = if let Some(msg) = &self.status_message {
+            msg.clone()
+        } else {
+            "Ctrl+S: Save | Ctrl+L: Load | Ctrl+U: Undo | Ctrl+R: Redo | q: Quit".to_string()
+        };
+        let status = Paragraph::new(status_text)
+            .style(Style::default().fg(Color::Yellow));
+        frame.render_widget(status, main_layout[2]);
         
         // Left side - Todo list
         let left_layout = Layout::default()
