@@ -13,8 +13,15 @@ Add optional memory-based limits to prevent unbounded history growth in applicat
 - 10 comprehensive tests added
 - Example demonstrating all use cases
 
-**Phase 2 (Memory-based limits): Not yet implemented**  
-- Would add `MemoryFootprint` trait and memory-based tracking
+**Phase 2 (Memory-based limits): IMPLEMENTED**  
+- `MemoryFootprint` trait for memory estimation
+- `with_max_memory_bytes()` and `with_max_memory_mb()` builder methods
+- Memory tracking fields in structs
+- Automatic memory-based pruning
+- Combined count and memory limit support
+- Built-in implementations for im:: types, String, Vec, and primitives
+- 10 comprehensive tests for memory-based limits
+- Complete demo example showing usage
 
 ## Design Goals
 

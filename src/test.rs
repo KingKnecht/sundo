@@ -1008,4 +1008,216 @@ mod builder_tests {
         // Pointer should be at the end
         assert_eq!(undo_redo.get_pointer(), undo_redo.get_history_len() - 1);
     }
+
+    // ============================================================================
+    // Memory-Based Limits Tests
+    // ============================================================================
+
+    #[test]
+    fn test_memory_footprint_for_string() {
+        use crate::sundo::MemoryFootprint;
+        
+        let s = String::from("hello");
+        let footprint = s.memory_footprint();
+        
+        // Should include base size + capacity
+        assert!(footprint >= std::mem::size_of::<String>() + s.capacity());
+    }
+
+    #[test]
+    fn test_memory_footprint_for_vec() {
+        use crate::sundo::MemoryFootprint;
+        
+        let v = vec![1, 2, 3, 4, 5];
+        let footprint = v.memory_footprint();
+        
+        // Should include base size + elements
+        assert!(footprint >= std::mem::size_of::<Vec<i32>>() + 5 * std::mem::size_of::<i32>());
+    }
+
+    #[test]
+    fn test_memory_footprint_for_im_vector() {
+        use crate::sundo::MemoryFootprint;
+        use im::Vector;
+        
+        let v: Vector<i32> = Vector::from(vec![1, 2, 3, 4, 5]);
+        let footprint = v.memory_footprint();
+        
+        // Should have some footprint
+        assert!(footprint > 0);
+    }
+
+    #[test]
+    fn test_memory_based_limit_basic() {
+        use crate::sundo::UndoRedoBuilder;
+        
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_memory_bytes(1000)
+            .build();
+        
+        // Add a string
+        undo_redo.push("Small".to_string(), "Initial".to_string());
+        
+        // Add more strings
+        for i in 0..10 {
+            undo_redo.update(
+                |s| format!("{} {}", s, "More text to increase memory"),
+                format!("Update {}", i)
+            );
+            
+            // Manually call prune to test memory-based pruning
+            undo_redo.prune();
+        }
+        
+        // History should be limited by memory
+        assert!(undo_redo.get_history_len() > 0);
+        assert!(undo_redo.get_history_len() < 11); // Should be less than total pushes
+    }
+
+    #[test]
+    fn test_memory_based_limit_with_vec() {
+        use crate::sundo::UndoRedoBuilder;
+        
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_memory_bytes(5000)
+            .build();
+        
+        undo_redo.push(Vec::<i32>::new(), "Empty".to_string());
+        
+        // Add many elements
+        for i in 0..100 {
+            undo_redo.update(
+                |v| {
+                    let mut new_v = v.clone();
+                    new_v.push(i);
+                    new_v
+                },
+                format!("Add {}", i)
+            );
+            
+            if i % 10 == 0 {
+                undo_redo.prune();
+            }
+        }
+        
+        // Should have been pruned
+        assert!(undo_redo.get_history_len() < 100);
+    }
+
+    #[test]
+    fn test_combined_limits() {
+        use crate::sundo::UndoRedoBuilder;
+        
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(20)
+            .with_max_memory_bytes(10000)
+            .build();
+        
+        undo_redo.push("test".to_string(), "Initial".to_string());
+        
+        for i in 0..50 {
+            undo_redo.update(
+                |s| format!("{} {}", s, i),
+                format!("Update {}", i)
+            );
+            undo_redo.prune();
+        }
+        
+        // Both limits should be respected
+        assert!(undo_redo.get_history_len() <= 20);
+    }
+
+    #[test]
+    fn test_memory_limit_preserves_current_state() {
+        use crate::sundo::UndoRedoBuilder;
+        
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_memory_bytes(500)
+            .build();
+        
+        undo_redo.push(String::from("initial"), "Initial".to_string());
+        
+        let mut last_value = String::from("initial");
+        for i in 0..20 {
+            last_value = format!("{} more_text_{}", last_value, i);
+            undo_redo.update(
+                |_| last_value.clone(),
+                format!("Update {}", i)
+            );
+            undo_redo.prune();
+        }
+        
+        // Current state should always be preserved
+        assert_eq!(*undo_redo.present().unwrap(), last_value);
+    }
+
+    #[test]
+    fn test_persistent_with_memory_limits() {
+        use crate::sundo::PersistentUndoRedoBuilder;
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedoBuilder::new()
+            .with_max_memory_mb(1)
+            .build();
+        
+        undo_redo.push(Vector::<i32>::new(), "Empty".to_string());
+        
+        for i in 0..100 {
+            undo_redo.update(
+                |v| {
+                    let mut new_v = v.clone();
+                    new_v.push_back(i);
+                    new_v
+                },
+                format!("Add {}", i)
+            );
+            
+            if i % 10 == 0 {
+                undo_redo.prune();
+            }
+        }
+        
+        // Should have been pruned but current state preserved
+        assert!(undo_redo.get_history_len() > 0);
+        assert_eq!(undo_redo.present().unwrap().len(), 100);
+    }
+
+    #[test]
+    fn test_snapshot_with_memory_info() {
+        use crate::sundo::UndoRedoBuilder;
+        
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_entries(10)
+            .with_max_memory_bytes(5000)
+            .build();
+        
+        undo_redo.push(String::from("test"), "Initial".to_string());
+        
+        let snapshot = undo_redo.export_snapshot();
+        
+        assert_eq!(snapshot.max_entries, Some(10));
+        assert_eq!(snapshot.max_memory_bytes, Some(5000));
+        assert!(snapshot.current_memory_bytes >= 0);
+    }
+
+    #[test]
+    fn test_restore_from_snapshot_with_memory_limits() {
+        use crate::sundo::{UndoRedoBuilder, UndoRedo};
+        
+        let mut undo_redo = UndoRedoBuilder::new()
+            .with_max_memory_mb(1)
+            .build();
+        
+        undo_redo.push(42, "Initial".to_string());
+        undo_redo.update(|x| x + 10, "Add 10".to_string());
+        
+        let snapshot = undo_redo.export_snapshot();
+        
+        // Restore from snapshot
+        let restored: UndoRedo<i32> = UndoRedo::from_snapshot(snapshot);
+        
+        assert_eq!(*restored.present().unwrap(), 52);
+        assert_eq!(restored.get_history_len(), 2);
+    }
 }
+

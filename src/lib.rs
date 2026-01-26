@@ -36,12 +36,147 @@ pub mod sundo {
     /// ```
     pub trait Persistent: Clone {}
 
+    /// Trait for types that can estimate their memory footprint.
+    /// 
+    /// Implement this trait to enable memory-based history limits.
+    /// The estimate should include heap allocations, not just stack size.
+    /// 
+    /// # Examples
+    /// 
+    /// ```ignore
+    /// use im::Vector;
+    /// 
+    /// struct MyState {
+    ///     data: Vector<String>,
+    ///     counter: u64,
+    /// }
+    /// 
+    /// impl MemoryFootprint for MyState {
+    ///     fn memory_footprint(&self) -> usize {
+    ///         std::mem::size_of::<Self>() +
+    ///         self.data.memory_footprint()
+    ///     }
+    /// }
+    /// ```
+    pub trait MemoryFootprint {
+        /// Estimate memory usage in bytes (including heap allocations).
+        fn memory_footprint(&self) -> usize;
+    }
+
     // Blanket implementations for im crate persistent data structures
     impl<T: Clone> Persistent for im::Vector<T> {}
     impl<K: Clone, V: Clone> Persistent for im::HashMap<K, V> {}
     impl<K: Clone, V: Clone> Persistent for im::OrdMap<K, V> {}
     impl<T: Clone> Persistent for im::HashSet<T> {}
     impl<T: Clone> Persistent for im::OrdSet<T> {}
+
+    // MemoryFootprint implementations for im crate types
+    // These are approximate due to structural sharing
+    impl<T: Clone> MemoryFootprint for im::Vector<T> {
+        fn memory_footprint(&self) -> usize {
+            // Approximate: base size + (length * estimated node overhead)
+            std::mem::size_of::<Self>() + (self.len() * 8)
+        }
+    }
+
+    impl<K: Clone, V: Clone> MemoryFootprint for im::HashMap<K, V> {
+        fn memory_footprint(&self) -> usize {
+            // Approximate: base size + entries * estimated overhead per entry
+            std::mem::size_of::<Self>() + (self.len() * 32)
+        }
+    }
+
+    impl<K: Clone, V: Clone> MemoryFootprint for im::OrdMap<K, V> {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>() + (self.len() * 32)
+        }
+    }
+
+    impl<T: Clone> MemoryFootprint for im::HashSet<T> {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>() + (self.len() * 24)
+        }
+    }
+
+    impl<T: Clone> MemoryFootprint for im::OrdSet<T> {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>() + (self.len() * 24)
+        }
+    }
+
+    // MemoryFootprint for common primitive types
+    impl MemoryFootprint for String {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>() + self.capacity()
+        }
+    }
+
+    impl<T> MemoryFootprint for Vec<T> {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>() + (self.capacity() * std::mem::size_of::<T>())
+        }
+    }
+
+    // Blanket implementation for simple Copy types without heap allocations
+    impl MemoryFootprint for i32 {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for i64 {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for u32 {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for u64 {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for f32 {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for f64 {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for bool {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for char {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for usize {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
+
+    impl MemoryFootprint for isize {
+        fn memory_footprint(&self) -> usize {
+            std::mem::size_of::<Self>()
+        }
+    }
 
     // ============================================================================
     // Standard UndoRedo with Rc wrapping (for any cloneable type)
@@ -57,6 +192,8 @@ pub mod sundo {
         pointer: usize,
         transaction_start: Option<usize>,
         max_entries: Option<usize>,
+        max_memory_bytes: Option<usize>,
+        current_memory_bytes: usize,
     }
 
     // ============================================================================
@@ -99,6 +236,8 @@ pub mod sundo {
         pointer: usize,
         transaction_start: Option<usize>,
         max_entries: Option<usize>,
+        max_memory_bytes: Option<usize>,
+        current_memory_bytes: usize,
     }
 
     /// Actions trait for persistent data structures.
@@ -190,6 +329,10 @@ pub mod sundo {
         pub transaction_start: Option<usize>,
         /// Maximum entries limit, if any
         pub max_entries: Option<usize>,
+        /// Maximum memory limit in bytes, if any
+        pub max_memory_bytes: Option<usize>,
+        /// Current memory usage in bytes
+        pub current_memory_bytes: usize,
     }
 
     /// Snapshot for PersistentUndoRedo (no Rc wrapping).
@@ -203,6 +346,10 @@ pub mod sundo {
         pub transaction_start: Option<usize>,
         /// Maximum entries limit, if any
         pub max_entries: Option<usize>,
+        /// Maximum memory limit in bytes, if any
+        pub max_memory_bytes: Option<usize>,
+        /// Current memory usage in bytes
+        pub current_memory_bytes: usize,
     }
 
     pub trait Actions<Payload> {
@@ -247,6 +394,8 @@ pub mod sundo {
                 pointer: 0,
                 transaction_start: None,
                 max_entries: None,
+                max_memory_bytes: None,
+                current_memory_bytes: 0,
             }
         }
 
@@ -404,6 +553,8 @@ pub mod sundo {
                 pointer: self.pointer,
                 transaction_start: self.transaction_start,
                 max_entries: self.max_entries,
+                max_memory_bytes: self.max_memory_bytes,
+                current_memory_bytes: self.current_memory_bytes,
             }
         }
         
@@ -418,6 +569,8 @@ pub mod sundo {
                 pointer: snapshot.pointer,
                 transaction_start: snapshot.transaction_start,
                 max_entries: snapshot.max_entries,
+                max_memory_bytes: snapshot.max_memory_bytes,
+                current_memory_bytes: snapshot.current_memory_bytes,
             }
         }
         
@@ -434,6 +587,8 @@ pub mod sundo {
                 pointer: 0,
                 transaction_start: None,
                 max_entries: None,
+                max_memory_bytes: None,
+                current_memory_bytes: 0,
             }
         }
 
@@ -591,6 +746,8 @@ pub mod sundo {
                 pointer: self.pointer,
                 transaction_start: self.transaction_start,
                 max_entries: self.max_entries,
+                max_memory_bytes: self.max_memory_bytes,
+                current_memory_bytes: self.current_memory_bytes,
             }
         }
         
@@ -605,6 +762,8 @@ pub mod sundo {
                 pointer: snapshot.pointer,
                 transaction_start: snapshot.transaction_start,
                 max_entries: snapshot.max_entries,
+                max_memory_bytes: snapshot.max_memory_bytes,
+                current_memory_bytes: snapshot.current_memory_bytes,
             }
         }
     }
@@ -776,6 +935,7 @@ pub mod sundo {
     pub struct UndoRedoBuilder<T> {
         initial_capacity: usize,
         max_entries: Option<usize>,
+        max_memory_bytes: Option<usize>,
         _phantom: std::marker::PhantomData<T>,
     }
 
@@ -785,6 +945,7 @@ pub mod sundo {
             Self {
                 initial_capacity: 100,
                 max_entries: None,
+                max_memory_bytes: None,
                 _phantom: std::marker::PhantomData,
             }
         }
@@ -808,6 +969,26 @@ pub mod sundo {
             self
         }
         
+        /// Set the maximum memory usage in bytes.
+        /// 
+        /// When the estimated memory usage exceeds this limit, the oldest
+        /// entries are automatically removed. Requires Payload to implement
+        /// MemoryFootprint trait.
+        /// 
+        /// Note: Memory estimation is approximate and only tracked when this
+        /// limit is set.
+        pub fn with_max_memory_bytes(mut self, max: usize) -> Self {
+            self.max_memory_bytes = Some(max);
+            self
+        }
+        
+        /// Convenience method to set memory limit in megabytes.
+        /// 
+        /// Equivalent to `with_max_memory_bytes(mb * 1024 * 1024)`.
+        pub fn with_max_memory_mb(self, mb: usize) -> Self {
+            self.with_max_memory_bytes(mb * 1024 * 1024)
+        }
+        
         /// Build the UndoRedo instance.
         pub fn build(self) -> UndoRedo<T> {
             UndoRedo {
@@ -815,6 +996,8 @@ pub mod sundo {
                 pointer: 0,
                 transaction_start: None,
                 max_entries: self.max_entries,
+                max_memory_bytes: self.max_memory_bytes,
+                current_memory_bytes: 0,
             }
         }
     }
@@ -840,6 +1023,7 @@ pub mod sundo {
     pub struct PersistentUndoRedoBuilder<T: Persistent> {
         initial_capacity: usize,
         max_entries: Option<usize>,
+        max_memory_bytes: Option<usize>,
         _phantom: std::marker::PhantomData<T>,
     }
 
@@ -849,6 +1033,7 @@ pub mod sundo {
             Self {
                 initial_capacity: 100,
                 max_entries: None,
+                max_memory_bytes: None,
                 _phantom: std::marker::PhantomData,
             }
         }
@@ -865,6 +1050,21 @@ pub mod sundo {
             self
         }
         
+        /// Set the maximum memory usage in bytes.
+        /// 
+        /// When the estimated memory usage exceeds this limit, the oldest
+        /// entries are automatically removed. Requires Payload to implement
+        /// MemoryFootprint trait.
+        pub fn with_max_memory_bytes(mut self, max: usize) -> Self {
+            self.max_memory_bytes = Some(max);
+            self
+        }
+        
+        /// Convenience method to set memory limit in megabytes.
+        pub fn with_max_memory_mb(self, mb: usize) -> Self {
+            self.with_max_memory_bytes(mb * 1024 * 1024)
+        }
+        
         /// Build the PersistentUndoRedo instance.
         pub fn build(self) -> PersistentUndoRedo<T> {
             PersistentUndoRedo {
@@ -872,6 +1072,8 @@ pub mod sundo {
                 pointer: 0,
                 transaction_start: None,
                 max_entries: self.max_entries,
+                max_memory_bytes: self.max_memory_bytes,
+                current_memory_bytes: 0,
             }
         }
     }
@@ -917,6 +1119,71 @@ pub mod sundo {
         }
     }
 
+    impl<T: MemoryFootprint> UndoRedo<T> {
+        /// Update memory tracking by computing total memory usage.
+        /// 
+        /// Only called when max_memory_bytes is set.
+        fn update_memory_usage(&mut self) {
+            if self.max_memory_bytes.is_some() {
+                self.current_memory_bytes = self.history.iter()
+                    .map(|e| {
+                        e.payload.memory_footprint() + 
+                        e.description.len() +
+                        std::mem::size_of::<Entry<T>>()  // Entry overhead
+                    })
+                    .sum();
+            }
+        }
+        
+        /// Prune history to stay within memory limit.
+        /// 
+        /// Removes oldest entries first until memory usage is below limit.
+        fn prune_by_memory(&mut self) {
+            if self.max_memory_bytes.is_none() {
+                return;
+            }
+            
+            self.update_memory_usage();
+            
+            if let Some(max_mem) = self.max_memory_bytes {
+                while self.current_memory_bytes > max_mem && self.history.len() > 1 {
+                    // Calculate size of oldest entry before removing
+                    if let Some(oldest) = self.history.first() {
+                        let entry_size = oldest.payload.memory_footprint() + 
+                                       oldest.description.len() +
+                                       std::mem::size_of::<Entry<T>>();
+                        self.current_memory_bytes = self.current_memory_bytes.saturating_sub(entry_size);
+                    }
+                    
+                    // Remove oldest entry
+                    self.history.remove(0);
+                    
+                    // Adjust pointer
+                    if self.pointer > 0 {
+                        self.pointer -= 1;
+                    }
+                    
+                    // Adjust transaction_start if active
+                    if let Some(ts) = self.transaction_start {
+                        if ts > 0 {
+                            self.transaction_start = Some(ts - 1);
+                        } else {
+                            self.transaction_start = Some(0);
+                        }
+                    }
+                }
+            }
+        }
+        
+        /// Combined pruning: apply both entry count and memory limits.
+        /// 
+        /// This is a convenience method that should be called after mutations.
+        pub fn prune(&mut self) {
+            self.prune_if_needed();  // Count-based pruning
+            self.prune_by_memory();  // Memory-based pruning
+        }
+    }
+
     impl<T: Persistent> PersistentUndoRedo<T> {
         /// Prune history to stay within max_entries limit.
         /// 
@@ -944,12 +1211,78 @@ pub mod sundo {
             }
         }
     }
+
+    impl<T: Persistent + MemoryFootprint> PersistentUndoRedo<T> {
+        /// Update memory tracking by computing total memory usage.
+        /// 
+        /// Only called when max_memory_bytes is set.
+        fn update_memory_usage(&mut self) {
+            if self.max_memory_bytes.is_some() {
+                self.current_memory_bytes = self.history.iter()
+                    .map(|e| {
+                        e.payload.memory_footprint() + 
+                        e.description.len() +
+                        std::mem::size_of::<PersistentEntry<T>>()  // Entry overhead
+                    })
+                    .sum();
+            }
+        }
+        
+        /// Prune history to stay within memory limit.
+        /// 
+        /// Removes oldest entries first until memory usage is below limit.
+        fn prune_by_memory(&mut self) {
+            if self.max_memory_bytes.is_none() {
+                return;
+            }
+            
+            self.update_memory_usage();
+            
+            if let Some(max_mem) = self.max_memory_bytes {
+                while self.current_memory_bytes > max_mem && self.history.len() > 1 {
+                    // Calculate size of oldest entry before removing
+                    if let Some(oldest) = self.history.first() {
+                        let entry_size = oldest.payload.memory_footprint() + 
+                                       oldest.description.len() +
+                                       std::mem::size_of::<PersistentEntry<T>>();
+                        self.current_memory_bytes = self.current_memory_bytes.saturating_sub(entry_size);
+                    }
+                    
+                    // Remove oldest entry
+                    self.history.remove(0);
+                    
+                    // Adjust pointer
+                    if self.pointer > 0 {
+                        self.pointer -= 1;
+                    }
+                    
+                    // Adjust transaction_start if active
+                    if let Some(ts) = self.transaction_start {
+                        if ts > 0 {
+                            self.transaction_start = Some(ts - 1);
+                        } else {
+                            self.transaction_start = Some(0);
+                        }
+                    }
+                }
+            }
+        }
+        
+        /// Combined pruning: apply both entry count and memory limits.
+        /// 
+        /// This is a convenience method that should be called after mutations.
+        pub fn prune(&mut self) {
+            self.prune_if_needed();  // Count-based pruning
+            self.prune_by_memory();  // Memory-based pruning
+        }
+    }
 }
 
 // Re-export main API items at the root for convenience
 pub use sundo::{
     Actions, 
     HistoryEntry,
+    MemoryFootprint,
     Persistent, 
     PersistentActions, 
     PersistentSnapshot,

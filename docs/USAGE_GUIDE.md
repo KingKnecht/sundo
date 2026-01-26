@@ -96,6 +96,68 @@ From benchmarks with 11 history entries:
 - History inspection
 - Go to specific history point
 - Custom descriptions for each change
+- Memory and count-based history limits
+
+## History Limits
+
+Both variants support optional history limits to prevent unbounded memory growth:
+
+### Count-Based Limits
+
+```rust
+use undo_redo::sundo::{Actions, UndoRedoBuilder};
+
+// Limit to 100 most recent entries
+let mut undo_redo = UndoRedoBuilder::new()
+    .with_max_entries(100)
+    .build();
+```
+
+### Memory-Based Limits
+
+For types implementing `MemoryFootprint`, you can limit by estimated memory usage:
+
+```rust
+use undo_redo::sundo::{Actions, MemoryFootprint, UndoRedoBuilder};
+use im::Vector;
+
+// Limit to 10 MB of history
+let mut undo_redo = UndoRedoBuilder::new()
+    .with_max_memory_mb(10)
+    .build();
+
+// Custom types can implement MemoryFootprint:
+#[derive(Clone)]
+struct MyState {
+    data: Vector<String>,
+    counter: u32,
+}
+
+impl MemoryFootprint for MyState {
+    fn memory_footprint(&self) -> usize {
+        std::mem::size_of::<Self>() +
+        self.data.memory_footprint()
+    }
+}
+```
+
+### Combined Limits
+
+You can use both limits together - whichever is hit first triggers pruning:
+
+```rust
+let mut undo_redo = UndoRedoBuilder::new()
+    .with_max_entries(1000)    // Max 1000 entries
+    .with_max_memory_mb(50)    // Max 50 MB
+    .build();
+```
+
+Built-in `MemoryFootprint` implementations exist for:
+- All `im::` types (`Vector`, `HashMap`, `OrdMap`, `HashSet`, `OrdSet`)
+- `String` and `Vec<T>`
+- Primitive numeric types (`i32`, `i64`, `u32`, `u64`, `f32`, `f64`, `bool`, `char`, etc.)
+
+
 
 ## Migration Path
 

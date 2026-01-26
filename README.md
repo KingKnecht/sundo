@@ -7,7 +7,7 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 - **Generic undo/redo** for any cloneable type
 - **Optimized for persistent data structures** (`im::Vector`, `im::HashMap`, etc.)
 - **Transaction support** with automatic rollback (RAII)
-- **History limits** to prevent unbounded memory growth
+- **History limits** (count-based and memory-based) to prevent unbounded memory growth
 - **Builder pattern** for flexible configuration
 - **Type-safe** and ergonomic API
 - **Zero-cost abstractions** when features aren't used
@@ -65,8 +65,20 @@ assert_eq!(current.len(), 2);
 ```rust
 use sundo::UndoRedoBuilder;
 
+// Count-based limit
 let mut undo_redo = UndoRedoBuilder::new()
     .with_max_entries(100)  // Keep only last 100 states
+    .build();
+
+// Memory-based limit
+let mut undo_redo = UndoRedoBuilder::new()
+    .with_max_memory_mb(50)  // Keep up to 50 MB of history
+    .build();
+
+// Combined limits (whichever is hit first)
+let mut undo_redo = UndoRedoBuilder::new()
+    .with_max_entries(1000)
+    .with_max_memory_mb(100)
     .build();
 
 // Automatically prunes oldest entries when limit exceeded
@@ -105,6 +117,10 @@ undo_redo.push(0, "Initial".to_string());
 ### Core Types
 
 - **`UndoRedo<T>`** - Standard implementation for any cloneable type
+### Memory Estimation
+
+- **`MemoryFootprint`** - Trait for memory-based history limits
+
 - **`PersistentUndoRedo<T>`** - Optimized for `im::` types
 
 ### Builder Pattern
@@ -121,11 +137,15 @@ undo_redo.push(0, "Initial".to_string());
 
 See the `demos/` directory for complete examples:
 
-- **basic-example** - Comparison of standard vs persistent implementations
-- **persistent-example** - Deep dive into persistent data structures
-- **scoped-transaction** - Transaction patterns and error handling
-- **builder-pattern** - History limits and configuration
+- **memory-limits** - Memory-based limits with MemoryFootprint trait
+- **mem-performance** - Memory performance testing and analysis
+- **serialization-example** - Save/load history without serde
+- **delta-example** - Compute diffs between history states
 
+Run demos with:
+```bash
+cd demos/basic-example && cargo run
+cd demos/memory-limits
 Run demos with:
 ```bash
 cd demos/basic-example && cargo run
@@ -152,26 +172,14 @@ When using `im::Vector`, `im::HashMap`, etc., the library leverages their built-
 ## Documentation
 
 - [API Documentation](https://docs.rs/sundo)
-- [Design Documentation](./docs/)
-  - [Helper Methods Design](./docs/HELPER_METHODS_DESIGN.md)
-  - [Memory Limits Design](./docs/MEMORY_LIMITS_DESIGN.md)
 
 ## Use Cases
 
-- **Text editors** - Character/line-based undo with bounded history
-- **Graphics applications** - Canvas state management
-- **Data editors** - Spreadsheet-like applications
-- **Game development** - State rollback and time travel debugging
-- **Form applications** - Undo field changes with transactions
+- we will find out...
 
 ## License
 
-Licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
 
 ## Contributing
 

@@ -69,6 +69,21 @@ Shows history limit configuration and builder pattern usage.
 
 ---
 
+### memory-limits
+Demonstrates memory-based history limits using the MemoryFootprint trait.
+
+**Topics covered:**
+- MemoryFootprint trait implementation
+- Memory-based pruning
+- Combined count and memory limits
+- Custom type memory estimation
+- Built-in im:: type support
+- Snapshot with memory info
+
+**Run:** `cd memory-limits && cargo run`
+
+---
+
 ### mem-performance
 Comprehensive memory performance tests measuring allocation patterns and efficiency.
 
@@ -125,7 +140,7 @@ These demos are planned for future development:
 
 ## Summary
 
-Currently available: **7 demos** covering basic usage, persistent data structures, transactions, history limits, memory analysis, serialization, and delta computation.
+Currently available: **8 demos** covering basic usage, persistent data structures, transactions, history limits, memory-based limits, memory analysis, serialization, and delta computation.
 
 ## Contributing
 
