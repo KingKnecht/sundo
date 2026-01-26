@@ -130,17 +130,48 @@ Shows how to compute deltas (diffs) between any two states in history.
 
 ---
 
+### todo_app
+Complete TUI todo list application demonstrating real-world sundo usage.
+
+![todo app](img/todo_app.gif)
+
+
+**Topics covered:**
+- Ratatui terminal interface
+- PersistentUndoRedo with im::Vector
+- Undo/redo for todo operations
+- Transactions (batch operations)
+- Save/load history to JSON
+- Persistent state across sessions
+- replace_current() for non-undoable state (navigation example)
+- Status messages and UI feedback
+
+**Run:** `cd todo_app && cargo run`
+
+**Controls:**
+- `Enter`: Add todo
+- `↑/↓`: Navigate todos
+- `Space`: Toggle completion
+- `d`: Delete selected todo
+- `Ctrl+U`: Undo
+- `Ctrl+R`: Redo
+- `Ctrl+T`: Start/End transaction
+- `Ctrl+C`: Cancel transaction
+- `Ctrl+S`: Save history
+- `Ctrl+L`: Load history
+- `q` or `Esc`: Quit
+
+---
+
 ## Future Demos
 
 These demos are planned for future development:
 
-- **todolist-app** - Complete terminal-based todo list application using sundo
-- **text-editor** - Simple text editor with undo/redo
 - **canvas-app** - Graphics canvas with state management
 
 ## Summary
 
-Currently available: **8 demos** covering basic usage, persistent data structures, transactions, history limits, memory-based limits, memory analysis, serialization, and delta computation.
+Currently available: **9 demos** covering basic usage, persistent data structures, transactions, history limits, memory-based limits, memory analysis, serialization, delta computation, and a complete todo app.
 
 ## Contributing
 

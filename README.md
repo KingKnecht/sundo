@@ -8,6 +8,8 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 - **Optimized for persistent data structures** (`im::Vector`, `im::HashMap`, etc.)
 - **Transaction support** with automatic rollback (RAII)
 - **History limits** (count-based and memory-based) to prevent unbounded memory growth
+- **In-place updates** with `replace_current()` for ephemeral state (navigation, UI state)
+- **Serialization support** via snapshot export/import
 - **Builder pattern** for flexible configuration
 - **Type-safe** and ergonomic API
 - **Zero-cost abstractions** when features aren't used
@@ -105,6 +107,33 @@ undo_redo.push(0, "Initial".to_string());
     tx.get().update(|x| x + 100, "temp".to_string());
     // If we panic or return early, transaction auto-rolls back
 }
+```
+
+### Ephemeral State Updates
+
+For state changes that shouldn't be undoable (like navigation or UI state):
+
+```rust
+use sundo::{PersistentActions, PersistentUndoRedo};
+use im::{HashMap, Vector};
+
+#[derive(Clone)]
+struct AppState {
+    todos: Vector<String>,
+    current_page: String,  // Navigation - shouldn't be undoable
+}
+
+let mut undo_redo = PersistentUndoRedo::new();
+// ... add some todos (undoable) ...
+
+// Change page without creating history entry
+undo_redo.replace_current(|state| AppState {
+    todos: state.todos.clone(),
+    current_page: "Settings".to_string(),
+});
+
+// Undo still works on todos, navigation stays at Settings
+undo_redo.undo();  // Reverts todo changes, keeps current_page
 ```
 
 ## API Overview

@@ -218,6 +218,94 @@ undo_redo.push(Vector::new(), "Initial".to_string());
 - Compiler ensures you don't forget to commit or cancel
 - Follows Rust RAII idioms (like `MutexGuard`)
 
+### Ephemeral State Updates with `replace_current()`
+
+In Elmish-style applications, some state changes shouldn't be undoable (like navigation, UI state, cursor position). The `replace_current()` method modifies the current state in-place without creating a new history entry:
+
+```rust
+use im::{HashMap, Vector};
+use undo_redo::sundo::{PersistentActions, PersistentUndoRedo, Persistent};
+
+#[derive(Clone)]
+struct AppState {
+    todos: Vector<String>,           // Undoable data
+    current_page: String,             // Ephemeral navigation
+    selected_index: Option<usize>,   // Ephemeral UI state
+}
+
+impl Persistent for AppState {}
+
+let mut undo_redo = PersistentUndoRedo::new();
+let initial = AppState {
+    todos: Vector::new(),
+    current_page: "Home".to_string(),
+    selected_index: None,
+};
+undo_redo.push(initial, "Initial".to_string());
+
+// Add a todo (creates history entry)
+undo_redo.update(|state| AppState {
+    todos: state.todos.push_back("Buy milk".to_string()),
+    ..state.clone()
+}, "Add todo".to_string());
+
+// Navigate to settings (no history entry)
+undo_redo.replace_current(|state| AppState {
+    current_page: "Settings".to_string(),
+    ..state.clone()
+});
+
+// Undo reverts todo change but keeps navigation
+undo_redo.undo();
+let current = undo_redo.present().unwrap();
+assert_eq!(current.current_page, "Settings");  // Navigation preserved
+assert_eq!(current.todos.len(), 0);             // Todo reverted
+```
+
+**Behavior:**
+- Updates the current state without adding a history entry
+- If not at the most recent state (after undo), `replace_current()` truncates future history
+- This maintains consistency: navigation forward would be confusing with stale future states
+- Works with both `UndoRedo` and `PersistentUndoRedo`
+
+**Use cases:**
+- Navigation state in multi-page apps
+- Cursor position in text editors
+- Selected items in lists
+- Expanded/collapsed states in tree views
+- Zoom/pan state in canvas apps
+- Search filters and sort orders
+
+**Example: Text Editor**
+
+```rust
+#[derive(Clone)]
+struct EditorState {
+    document: Vector<String>,  // Undoable content
+    cursor: (usize, usize),    // Ephemeral cursor position
+}
+
+impl Persistent for EditorState {}
+
+// Type character (undoable)
+editor.update(|state| {
+    let mut new_doc = state.document.clone();
+    new_doc.push_back("New line".to_string());
+    EditorState {
+        document: new_doc,
+        cursor: (state.cursor.0 + 1, 0),
+    }
+}, "Type".to_string());
+
+// Move cursor (not undoable)
+editor.replace_current(|state| EditorState {
+    cursor: (state.cursor.0, state.cursor.1 + 1),
+    ..state.clone()
+});
+```
+
+See the `todo_app` demo for a complete implementation using this pattern.
+
 ### Serialization Support
 
 Export and restore history without requiring serde:

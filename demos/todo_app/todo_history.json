@@ -12,7 +12,7 @@
         "todos": [
           {
             "id": 1,
-            "text": "A",
+            "text": "Learn Rust",
             "completed": false
           }
         ],
@@ -25,12 +25,12 @@
         "todos": [
           {
             "id": 1,
-            "text": "A",
+            "text": "Learn Rust",
             "completed": false
           },
           {
             "id": 2,
-            "text": "B",
+            "text": "Learn Ratatui",
             "completed": false
           }
         ],
@@ -43,17 +43,17 @@
         "todos": [
           {
             "id": 1,
-            "text": "A",
+            "text": "Learn Rust",
             "completed": false
           },
           {
             "id": 2,
-            "text": "B",
+            "text": "Learn Ratatui",
             "completed": false
           },
           {
             "id": 3,
-            "text": "C",
+            "text": "Write Undo/Redo Framework",
             "completed": false
           }
         ],
@@ -66,26 +66,79 @@
         "todos": [
           {
             "id": 1,
-            "text": "A",
-            "completed": false
-          },
-          {
-            "id": 2,
-            "text": "B",
+            "text": "Learn Rust",
             "completed": true
           },
           {
+            "id": 2,
+            "text": "Learn Ratatui",
+            "completed": false
+          },
+          {
             "id": 3,
-            "text": "C",
+            "text": "Write Undo/Redo Framework",
             "completed": false
           }
         ],
         "next_id": 4
       },
       "Toggle todo"
+    ],
+    [
+      {
+        "todos": [
+          {
+            "id": 1,
+            "text": "Learn Rust",
+            "completed": true
+          },
+          {
+            "id": 2,
+            "text": "Learn Ratatui",
+            "completed": true
+          },
+          {
+            "id": 3,
+            "text": "Write Undo/Redo Framework",
+            "completed": false
+          }
+        ],
+        "next_id": 4
+      },
+      "Toggle todo"
+    ],
+    [
+      {
+        "todos": [
+          {
+            "id": 1,
+            "text": "Learn Rust",
+            "completed": true
+          },
+          {
+            "id": 2,
+            "text": "Learn Ratatui",
+            "completed": true
+          },
+          {
+            "id": 3,
+            "text": "Write Undo/Redo Framework",
+            "completed": true
+          }
+        ],
+        "next_id": 4
+      },
+      "Toggle todo"
+    ],
+    [
+      {
+        "todos": [],
+        "next_id": 4
+      },
+      "Transaction"
     ]
   ],
-  "pointer": 1,
+  "pointer": 6,
   "transaction_start": null,
   "max_entries": null,
   "max_memory_bytes": null,

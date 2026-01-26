@@ -12,3 +12,4 @@ Cargo.lock
 # OS
 .DS_Store
 Thumbs.db
+demos/todo_app/todo_history.json
