@@ -4,13 +4,13 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 
 ## Features
 
-- ✅ **Generic undo/redo** for any cloneable type
-- ✅ **Optimized for persistent data structures** (`im::Vector`, `im::HashMap`, etc.)
-- ✅ **Transaction support** with automatic rollback (RAII)
-- ✅ **History limits** to prevent unbounded memory growth
-- ✅ **Builder pattern** for flexible configuration
-- ✅ **Type-safe** and ergonomic API
-- ✅ **Zero-cost abstractions** when features aren't used
+- **Generic undo/redo** for any cloneable type
+- **Optimized for persistent data structures** (`im::Vector`, `im::HashMap`, etc.)
+- **Transaction support** with automatic rollback (RAII)
+- **History limits** to prevent unbounded memory growth
+- **Builder pattern** for flexible configuration
+- **Type-safe** and ergonomic API
+- **Zero-cost abstractions** when features aren't used
 
 ## Quick Start
 
