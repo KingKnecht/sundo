@@ -16,31 +16,6 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 
 ## Installation
 
-**Note:** This library is not yet published to crates.io. Until then, you can use it via git or as a local dependency.
-
-### Option 1: Git Dependency
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-sundo = { git = "https://github.com/yourusername/sundo.git" }
-
-```
-
-### Option 2: Local Path Dependency
-
-If you've cloned the repository locally:
-
-```toml
-[dependencies]
-sundo = { path = "../sundo" }  # Adjust path relative to your project
-```
-
-### Option 3: When Published (Future)
-
-Once published to crates.io:
-
 ```toml
 [dependencies]
 sundo = "0.1.0"
