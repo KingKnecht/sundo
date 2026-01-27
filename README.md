@@ -14,14 +14,39 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 - **Type-safe** and ergonomic API
 - **Zero-cost abstractions** when features aren't used
 
-## Quick Start
+## Installation
+
+**Note:** This library is not yet published to crates.io. Until then, you can use it via git or as a local dependency.
+
+### Option 1: Git Dependency
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
+sundo = { git = "https://github.com/yourusername/sundo.git" }
+
+```
+
+### Option 2: Local Path Dependency
+
+If you've cloned the repository locally:
+
+```toml
+[dependencies]
+sundo = { path = "../sundo" }  # Adjust path relative to your project
+```
+
+### Option 3: When Published (Future)
+
+Once published to crates.io:
+
+```toml
+[dependencies]
 sundo = "0.1.0"
 ```
+
+## Quick Start
 
 ### Basic Usage
 
@@ -174,14 +199,23 @@ See the `demos/` directory for complete examples:
 - **mem-performance** - Comprehensive memory performance testing and analysis
 - **serialization-example** - Save/load history without serde
 - **delta-example** - Compute diffs between history states
+- **todo_app** - Full TUI todo application with undo/redo, transactions, save/load
 
 Run demos with:
 ```bash
 cd demos/basic-example && cargo run
 cd demos/memory-limits && cargo run
 cd demos/delta-example && cargo run
+cd demos/todo_app && cargo run
 # etc.
 ```
+
+**Note:** All demos use the library via a local path dependency:
+```toml
+[dependencies]
+sundo = { path = "../.." }
+```
+This is a good pattern for your own projects during development.
 
 ## Design Philosophy
 
@@ -215,6 +249,20 @@ cargo doc --open
 ## License
 
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+## Publishing to Crates.io
+
+Before publishing, update the following in `Cargo.toml`:
+
+```toml
+authors = ["Your Name <your.email@example.com>"]
+repository = "https://github.com/yourusername/sundo"
+```
+
+Then publish with:
+```bash
+cargo publish
+```
 
 ## Contributing
 

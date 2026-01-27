@@ -2,6 +2,22 @@
 
 This directory contains standalone demonstration applications showing various features of the sundo library.
 
+## Using the Local Library
+
+All demos use a local path dependency to the sundo library:
+
+```toml
+[dependencies]
+sundo = { path = "../.." }
+```
+
+This means you can modify the library source code and immediately see the changes reflected in the demos without publishing or reinstalling. This pattern is useful for:
+- Testing library changes
+- Prototyping new features
+- Your own projects during development
+
+For production projects, see the [Installation section](../README.md#installation) in the main README.
+
 ## Running Demos
 
 Each demo is a standalone Cargo project. Navigate to its directory and run:
