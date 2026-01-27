@@ -8,7 +8,7 @@ repository = "https://github.com/kingknecht/sundo"
 keywords = ["undo", "redo", "history", "snapshot", "persistent"]
 categories = ["data-structures", "algorithms"]
 readme = "README.md"
-exclude = ["demos/", "target/", ".vscode/" "docs/]
+exclude = ["demos/", "target/", ".vscode/", "docs/"]
 
 [dependencies]
 im = "15.1"
