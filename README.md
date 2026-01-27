@@ -210,7 +210,7 @@ When using `im::Vector`, `im::HashMap`, etc., the library leverages their built-
 
 ## Documentation
 
-- [Usage Guide](docs/USAGE_GUIDE.md) - Comprehensive guide for choosing between UndoRedo and PersistentUndoRedo
+- [Usage Guide](https://github.com/KingKnecht/sundo/blob/master/docs/USAGE_GUIDE.md) - for additional info
 
 Generate API documentation locally:
 ```bash
@@ -224,20 +224,6 @@ cargo doc --open
 ## License
 
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-## Publishing to Crates.io
-
-Before publishing, update the following in `Cargo.toml`:
-
-```toml
-authors = ["Your Name <your.email@example.com>"]
-repository = "https://github.com/yourusername/sundo"
-```
-
-Then publish with:
-```bash
-cargo publish
-```
 
 ## Contributing
 
