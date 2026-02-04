@@ -681,6 +681,284 @@ mod tests {
         assert_eq!(undo_redo.present().unwrap()[2], 99);
     }
 
+    // ============================================================================
+    // modify_current_in_place Tests
+    // ============================================================================
+
+    #[test]
+    fn test_modify_current_in_place_basic() {
+        let mut undo_redo = UndoRedo::<Vec<i32>>::new();
+        undo_redo.push(vec![1, 2, 3], "Initial".to_string());
+        
+        // Modify in-place
+        undo_redo.modify_current_in_place(|v| {
+            v.push(4);
+        });
+        
+        // Should be modified
+        assert_eq!(*undo_redo.present().unwrap(), vec![1, 2, 3, 4]);
+        
+        // History length should not change
+        assert_eq!(undo_redo.get_history_len(), 1);
+    }
+
+    #[test]
+    fn test_modify_current_in_place_preserves_redo_stack() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        undo_redo.push(1, "First".to_string());
+        undo_redo.push(2, "Second".to_string());
+        undo_redo.push(3, "Third".to_string());
+        undo_redo.push(4, "Fourth".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 4);
+        
+        // Undo twice - now at state 2 with states 3 and 4 in future
+        undo_redo.undo();
+        undo_redo.undo();
+        assert_eq!(*undo_redo.present().unwrap(), 2);
+        assert!(undo_redo.can_redo());
+        assert_eq!(undo_redo.get_history_len(), 4);
+        
+        // Modify in-place - should NOT truncate future history
+        undo_redo.modify_current_in_place(|x| {
+            *x = *x * 10;
+        });
+        
+        // Future should still be there!
+        assert_eq!(undo_redo.get_history_len(), 4);
+        assert!(undo_redo.can_redo());
+        assert_eq!(*undo_redo.present().unwrap(), 20);
+        
+        // Can still redo
+        undo_redo.redo();
+        assert_eq!(*undo_redo.present().unwrap(), 3);
+    }
+
+    #[test]
+    fn test_modify_current_in_place_on_empty() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        
+        // Should do nothing without panicking
+        undo_redo.modify_current_in_place(|x| {
+            *x = 42;
+        });
+        
+        assert!(undo_redo.present().is_none());
+    }
+
+    #[test]
+    fn test_modify_current_in_place_multiple_times() {
+        let mut undo_redo = UndoRedo::<String>::new();
+        undo_redo.push("hello".to_string(), "Initial".to_string());
+        
+        // Multiple in-place modifications
+        undo_redo.modify_current_in_place(|s| {
+            s.push_str(" world");
+        });
+        undo_redo.modify_current_in_place(|s| {
+            s.push('!');
+        });
+        undo_redo.modify_current_in_place(|s| {
+            *s = s.to_uppercase();
+        });
+        
+        // Still only one history entry
+        assert_eq!(undo_redo.get_history_len(), 1);
+        assert_eq!(*undo_redo.present().unwrap(), "HELLO WORLD!");
+        
+        // Can't undo since we only have one state
+        assert!(!undo_redo.can_undo());
+    }
+
+    #[test]
+    fn test_modify_current_in_place_with_transaction() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        undo_redo.push(0, "Initial".to_string());
+        
+        undo_redo.start_transaction();
+        undo_redo.update(|x| x + 1, "Add 1".to_string());
+        undo_redo.update(|x| x + 2, "Add 2".to_string());
+        
+        // Modify in-place during transaction
+        undo_redo.modify_current_in_place(|x| {
+            *x = *x * 2;
+        });
+        
+        undo_redo.end_transaction("Transaction".to_string());
+        
+        // Should have collapsed to 2 states: initial + transaction result
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(*undo_redo.present().unwrap(), 6);  // (0+1+2)*2 = 6
+    }
+
+    #[test]
+    fn test_modify_current_in_place_preserves_description() {
+        let mut undo_redo = UndoRedo::<i32>::new();
+        undo_redo.push(1, "First entry".to_string());
+        undo_redo.update(|x| x + 1, "Second entry".to_string());
+        
+        // Modify in-place
+        undo_redo.modify_current_in_place(|x| *x = *x * 10);
+        
+        // Check that descriptions are preserved
+        let history = undo_redo.get_history().unwrap();
+        assert_eq!(history[0].description, "First entry");
+        assert_eq!(history[1].description, "Second entry");
+        
+        // But the value has changed
+        assert_eq!(*undo_redo.present().unwrap(), 20);
+    }
+
+    #[test]
+    fn test_persistent_modify_current_in_place_basic() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        undo_redo.push(Vector::from(vec![1, 2, 3]), "Initial".to_string());
+        
+        // Modify in-place - truly in-place for persistent types!
+        undo_redo.modify_current_in_place(|v| {
+            v.push_back(4);
+        });
+        
+        // Should be modified
+        assert_eq!(undo_redo.present().unwrap().len(), 4);
+        assert_eq!(undo_redo.present().unwrap()[3], 4);
+        
+        // History length should not change
+        assert_eq!(undo_redo.get_history_len(), 1);
+    }
+
+    #[test]
+    fn test_persistent_modify_current_in_place_preserves_redo() {
+        use im::Vector;
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        undo_redo.push(Vector::from(vec![1]), "First".to_string());
+        undo_redo.push(Vector::from(vec![1, 2]), "Second".to_string());
+        undo_redo.push(Vector::from(vec![1, 2, 3]), "Third".to_string());
+        
+        // Undo - now at second state with third in future
+        undo_redo.undo();
+        assert_eq!(undo_redo.present().unwrap().len(), 2);
+        assert!(undo_redo.can_redo());
+        
+        // Modify in-place - should NOT truncate future
+        undo_redo.modify_current_in_place(|v| {
+            v.push_back(99);
+        });
+        
+        // Future should still be there!
+        assert_eq!(undo_redo.get_history_len(), 3);
+        assert!(undo_redo.can_redo());
+        assert_eq!(undo_redo.present().unwrap().len(), 3);
+        assert_eq!(undo_redo.present().unwrap()[2], 99);
+        
+        // Can still redo
+        undo_redo.redo();
+        assert_eq!(undo_redo.present().unwrap().len(), 3);
+        assert_eq!(undo_redo.present().unwrap()[2], 3);  // Original future state
+    }
+
+    #[test]
+    fn test_persistent_modify_current_in_place_complex_modifications() {
+        use im::HashMap;
+        
+        #[derive(Clone, PartialEq, Debug)]
+        struct AppState {
+            data: HashMap<String, i32>,
+            dirty: bool,
+        }
+        
+        impl Persistent for AppState {}
+        
+        let mut undo_redo = PersistentUndoRedo::new();
+        let initial = AppState {
+            data: HashMap::new(),
+            dirty: false,
+        };
+        undo_redo.push(initial, "Initial".to_string());
+        
+        // Add some data (undoable)
+        undo_redo.update(|state| {
+            AppState {
+                data: state.data.update("key1".to_string(), 100),
+                dirty: state.dirty,
+            }
+        }, "Add key1".to_string());
+        
+        assert_eq!(undo_redo.get_history_len(), 2);
+        
+        // Set dirty flag (not undoable)
+        undo_redo.modify_current_in_place(|state| {
+            state.dirty = true;
+        });
+        
+        // History length unchanged
+        assert_eq!(undo_redo.get_history_len(), 2);
+        assert_eq!(undo_redo.present().unwrap().dirty, true);
+        
+        // Undo goes back to previous data state
+        undo_redo.undo();
+        let state = undo_redo.present().unwrap();
+        assert_eq!(state.data.len(), 0);
+        assert_eq!(state.dirty, false);  // Back to original state
+    }
+
+    #[test]
+    fn test_modify_vs_replace_current_behavior() {
+        let mut undo_redo1 = UndoRedo::<i32>::new();
+        let mut undo_redo2 = UndoRedo::<i32>::new();
+        
+        // Setup identical histories
+        for ur in [&mut undo_redo1, &mut undo_redo2].iter_mut() {
+            ur.push(1, "First".to_string());
+            ur.push(2, "Second".to_string());
+            ur.push(3, "Third".to_string());
+            ur.undo();  // Back to 2, with 3 in future
+        }
+        
+        // Test modify_current_in_place - preserves redo
+        undo_redo1.modify_current_in_place(|x| *x = *x * 10);
+        assert_eq!(undo_redo1.get_history_len(), 3);
+        assert!(undo_redo1.can_redo());
+        
+        // Test replace_current - truncates redo
+        undo_redo2.replace_current(|x| x * 10);
+        assert_eq!(undo_redo2.get_history_len(), 2);
+        assert!(!undo_redo2.can_redo());
+    }
+
+    #[test]
+    fn test_persistent_modify_vs_replace_current_behavior() {
+        use im::Vector;
+        
+        let mut undo_redo1 = PersistentUndoRedo::new();
+        let mut undo_redo2 = PersistentUndoRedo::new();
+        
+        // Setup identical histories
+        for ur in [&mut undo_redo1, &mut undo_redo2].iter_mut() {
+            ur.push(Vector::from(vec![1]), "First".to_string());
+            ur.push(Vector::from(vec![1, 2]), "Second".to_string());
+            ur.push(Vector::from(vec![1, 2, 3]), "Third".to_string());
+            ur.undo();  // Back to [1,2], with [1,2,3] in future
+        }
+        
+        // Test modify_current_in_place - preserves redo
+        undo_redo1.modify_current_in_place(|v| v.push_back(99));
+        assert_eq!(undo_redo1.get_history_len(), 3);
+        assert!(undo_redo1.can_redo());
+        
+        // Test replace_current - truncates redo
+        undo_redo2.replace_current(|v| {
+            let mut new_v = v.clone();
+            new_v.push_back(99);
+            new_v
+        });
+        assert_eq!(undo_redo2.get_history_len(), 2);
+        assert!(!undo_redo2.can_redo());
+    }
+
     #[test]
     fn test_rc_sharing() {
         let mut undo_redo = UndoRedo::<Vec<i32>>::new();

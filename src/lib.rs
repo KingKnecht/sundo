@@ -256,15 +256,25 @@ pub mod sundo {
         where
             F: FnOnce(&Payload) -> Payload;
         
-        /// Update the current state in-place without adding to history.
+        /// Replace the current state without adding to history.
         /// 
-        /// Useful for ephemeral state changes that shouldn't be undoable,
-        /// such as navigation, UI state, or selection changes.
+        /// **IMPORTANT:** This function **TRUNCATES** any redo history (future states).
+        /// If you've undone some operations and have future states available,
+        /// calling this will permanently discard them, similar to `push()` or `update()`.
+        /// 
+        /// Use `modify_current_in_place()` instead if you need to preserve the redo stack.
+        /// 
+        /// # When to use
+        /// 
+        /// - Update state that shouldn't create a new undo entry
+        /// - When you don't care about preserving future history
+        /// - For UI state changes that are part of the current logical state
         /// 
         /// # Examples
         /// 
         /// ```ignore
         /// // Update navigation without creating undo history
+        /// // This will discard any redo history!
         /// app_state.replace_current(|state| {
         ///     let mut new_state = state.clone();
         ///     new_state.current_page = Page::Settings;
@@ -287,6 +297,23 @@ pub mod sundo {
         /// 
         /// Useful for comparing states or computing deltas.
         fn peek_at(&self, index: usize) -> Option<&Payload>;
+        
+        /// Modify the current state in-place without affecting undo/redo history.
+        /// 
+        /// This is useful for making mutations that shouldn't create undo entries,
+        /// while preserving the redo stack (unlike `replace_current` which truncates it).
+        /// 
+        /// # Examples
+        /// 
+        /// ```ignore
+        /// // Update a flag or counter without affecting undo/redo
+        /// undo_redo.modify_current_in_place(|state| {
+        ///     state.dirty_flag = true;
+        /// });
+        /// ```
+        fn modify_current_in_place<F>(&mut self, f: F)
+        where
+            F: FnOnce(&mut Payload);
         
         /// Export history as a snapshot for serialization.
         fn export_snapshot(&self) -> PersistentSnapshot<Payload>;
@@ -384,15 +411,25 @@ pub mod sundo {
         where
             F: FnOnce(&Payload) -> Payload;
         
-        /// Update the current state in-place without adding to history.
+        /// Replace the current state without adding to history.
         /// 
-        /// Useful for ephemeral state changes that shouldn't be undoable,
-        /// such as navigation, UI state, or selection changes.
+        /// **IMPORTANT:** This function **TRUNCATES** any redo history (future states).
+        /// If you've undone some operations and have future states available,
+        /// calling this will permanently discard them, similar to `push()` or `update()`.
+        /// 
+        /// Use `modify_current_in_place()` instead if you need to preserve the redo stack.
+        /// 
+        /// # When to use
+        /// 
+        /// - Update state that shouldn't create a new undo entry
+        /// - When you don't care about preserving future history
+        /// - For UI state changes that are part of the current logical state
         /// 
         /// # Examples
         /// 
         /// ```ignore
         /// // Update navigation without creating undo history
+        /// // This will discard any redo history!
         /// app_state.replace_current(|state| {
         ///     let mut new_state = state.clone();
         ///     new_state.current_page = Page::Settings;
@@ -415,6 +452,24 @@ pub mod sundo {
         /// 
         /// Useful for comparing states or computing deltas.
         fn peek_at(&self, index: usize) -> Option<Rc<Payload>>;
+        
+        /// Modify the current state in-place without affecting undo/redo history.
+        /// 
+        /// Uses `Rc::make_mut()` which clones only if there are other references to the Rc.
+        /// Preserves the redo stack (unlike `replace_current` which truncates it).
+        /// 
+        /// # Examples
+        /// 
+        /// ```ignore
+        /// // Update a flag or counter without affecting undo/redo
+        /// undo_redo.modify_current_in_place(|state| {
+        ///     state.dirty_flag = true;
+        /// });
+        /// ```
+        fn modify_current_in_place<F>(&mut self, f: F)
+        where
+            F: FnOnce(&mut Payload),
+            Payload: Clone;
         
         /// Export history as a snapshot for serialization.
         /// 
@@ -603,6 +658,19 @@ pub mod sundo {
         
         fn peek_at(&self, index: usize) -> Option<Rc<Payload>> {
             self.history.get(index).map(|e| Rc::clone(&e.payload))
+        }
+        
+        fn modify_current_in_place<F>(&mut self, f: F)
+        where
+            F: FnOnce(&mut Payload),
+            Payload: Clone,
+        {
+            if let Some(entry) = self.history.get_mut(self.pointer) {
+                // Use Rc::make_mut to get mutable access
+                // This clones only if there are other strong references
+                let payload_mut = Rc::make_mut(&mut entry.payload);
+                f(payload_mut);
+            }
         }
         
         fn export_snapshot(&self) -> Snapshot<Payload> {
@@ -817,6 +885,15 @@ pub mod sundo {
         
         fn peek_at(&self, index: usize) -> Option<&Payload> {
             self.history.get(index).map(|e| &e.payload)
+        }
+        
+        fn modify_current_in_place<F>(&mut self, f: F)
+        where
+            F: FnOnce(&mut Payload),
+        {
+            if let Some(entry) = self.history.get_mut(self.pointer) {
+                f(&mut entry.payload);
+            }
         }
         
         fn export_snapshot(&self) -> PersistentSnapshot<Payload> {
