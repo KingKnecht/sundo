@@ -1,7 +1,7 @@
 [package]
 name = "sundo"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 license = "MIT"
 description = "Snapshot-based undo/redo library with support for persistent data structures"
 repository = "https://github.com/kingknecht/sundo"
@@ -10,6 +10,10 @@ categories = ["data-structures", "algorithms"]
 readme = "README.md"
 exclude = ["demos/", "docs/", ".vscode/", ".gitignore"]
 
+[features]
+default = ["persistent"]
+persistent = ["dep:im"]
+
 [dependencies]
-im = "15.1"
+im = { version = "15.1", optional = true }
 

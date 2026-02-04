@@ -64,14 +64,20 @@ pub mod sundo {
     }
 
     // Blanket implementations for im crate persistent data structures
+    #[cfg(feature = "persistent")]
     impl<T: Clone> Persistent for im::Vector<T> {}
+    #[cfg(feature = "persistent")]
     impl<K: Clone, V: Clone> Persistent for im::HashMap<K, V> {}
+    #[cfg(feature = "persistent")]
     impl<K: Clone, V: Clone> Persistent for im::OrdMap<K, V> {}
+    #[cfg(feature = "persistent")]
     impl<T: Clone> Persistent for im::HashSet<T> {}
+    #[cfg(feature = "persistent")]
     impl<T: Clone> Persistent for im::OrdSet<T> {}
 
     // MemoryFootprint implementations for im crate types
     // These are approximate due to structural sharing
+    #[cfg(feature = "persistent")]
     impl<T: Clone> MemoryFootprint for im::Vector<T> {
         fn memory_footprint(&self) -> usize {
             // Approximate: base size + (length * estimated node overhead)
@@ -79,6 +85,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<K: Clone, V: Clone> MemoryFootprint for im::HashMap<K, V> {
         fn memory_footprint(&self) -> usize {
             // Approximate: base size + entries * estimated overhead per entry
@@ -86,18 +93,21 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<K: Clone, V: Clone> MemoryFootprint for im::OrdMap<K, V> {
         fn memory_footprint(&self) -> usize {
             std::mem::size_of::<Self>() + (self.len() * 32)
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<T: Clone> MemoryFootprint for im::HashSet<T> {
         fn memory_footprint(&self) -> usize {
             std::mem::size_of::<Self>() + (self.len() * 24)
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<T: Clone> MemoryFootprint for im::OrdSet<T> {
         fn memory_footprint(&self) -> usize {
             std::mem::size_of::<Self>() + (self.len() * 24)
@@ -200,6 +210,7 @@ pub mod sundo {
     // Optimized PersistentUndoRedo (no Rc wrapping for Persistent types)
     // ============================================================================
 
+    #[cfg(feature = "persistent")]
     /// Optimized undo/redo for persistent data structures.
     /// 
     /// Unlike `UndoRedo` which wraps payloads in `Rc`, `PersistentUndoRedo` stores
@@ -226,11 +237,13 @@ pub mod sundo {
     /// // Returns &Vector<i32> instead of Rc<Vector<i32>>
     /// let current = undo_redo.present().unwrap();
     /// ```
+    #[cfg(feature = "persistent")]
     struct PersistentEntry<Payload> {
         payload: Payload,  // Store directly, no Rc!
         description: String,
     }
 
+    #[cfg(feature = "persistent")]
     pub struct PersistentUndoRedo<Payload: Persistent> {
         history: Vec<PersistentEntry<Payload>>,
         pointer: usize,
@@ -244,6 +257,7 @@ pub mod sundo {
     /// 
     /// Similar to `Actions` but optimized for types implementing `Persistent`.
     /// Returns references instead of `Rc` since cloning is cheap.
+    #[cfg(feature = "persistent")]
     pub trait PersistentActions<Payload: Persistent> {
         fn new() -> Self;
         fn push(&mut self, value: Payload, description: String) -> &Payload;
@@ -383,6 +397,7 @@ pub mod sundo {
     }
 
     /// Snapshot for PersistentUndoRedo (no Rc wrapping).
+    #[cfg(feature = "persistent")]
     #[derive(Debug, Clone)]
     pub struct PersistentSnapshot<T: Persistent> {
         /// All history entries as (payload, description) pairs
@@ -709,6 +724,7 @@ pub mod sundo {
     // PersistentActions Implementation - Optimized for structural sharing
     // ============================================================================
 
+    #[cfg(feature = "persistent")]
     impl<Payload: Persistent> PersistentActions<Payload> for PersistentUndoRedo<Payload> {
         fn new() -> Self {
             Self {
@@ -1008,6 +1024,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     /// RAII transaction wrapper for PersistentUndoRedo.
     /// 
     /// Same as `ScopedTransaction` but for persistent data structures.
@@ -1028,12 +1045,14 @@ pub mod sundo {
     ///     tx.commit();
     /// }
     /// ```
+    #[cfg(feature = "persistent")]
     pub struct PersistentScopedTransaction<'a, T: Persistent> {
         undo_redo: &'a mut PersistentUndoRedo<T>,
         description: String,
         committed: bool,
     }
 
+    #[cfg(feature = "persistent")]
     impl<'a, T: Persistent> PersistentScopedTransaction<'a, T> {
         /// Begin a new transaction.
         pub fn begin(undo_redo: &'a mut PersistentUndoRedo<T>, description: impl Into<String>) -> Self {
@@ -1057,6 +1076,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<'a, T: Persistent> Drop for PersistentScopedTransaction<'a, T> {
         /// Automatically rolls back if not committed.
         fn drop(&mut self) {
@@ -1167,6 +1187,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     /// Builder for constructing PersistentUndoRedo with optional configuration.
     /// 
     /// # Examples
@@ -1179,6 +1200,7 @@ pub mod sundo {
     ///     .with_max_entries(100)
     ///     .build();
     /// ```
+    #[cfg(feature = "persistent")]
     pub struct PersistentUndoRedoBuilder<T: Persistent> {
         initial_capacity: usize,
         max_entries: Option<usize>,
@@ -1186,6 +1208,7 @@ pub mod sundo {
         _phantom: std::marker::PhantomData<T>,
     }
 
+    #[cfg(feature = "persistent")]
     impl<T: Persistent> PersistentUndoRedoBuilder<T> {
         /// Create a new builder with default settings.
         pub fn new() -> Self {
@@ -1237,6 +1260,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<T: Persistent> Default for PersistentUndoRedoBuilder<T> {
         fn default() -> Self {
             Self::new()
@@ -1343,6 +1367,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<T: Persistent> PersistentUndoRedo<T> {
         /// Prune history to stay within max_entries limit.
         /// 
@@ -1371,6 +1396,7 @@ pub mod sundo {
         }
     }
 
+    #[cfg(feature = "persistent")]
     impl<T: Persistent + MemoryFootprint> PersistentUndoRedo<T> {
         /// Update memory tracking by computing total memory usage.
         /// 
@@ -1443,16 +1469,20 @@ pub use sundo::{
     HistoryEntry,
     MemoryFootprint,
     Persistent, 
-    PersistentActions, 
-    PersistentSnapshot,
-    PersistentUndoRedo, 
-    PersistentUndoRedoBuilder,
-    PersistentScopedTransaction,
     ScopedTransaction,
     Snapshot,
     Tenses,
     UndoRedo, 
     UndoRedoBuilder,
+};
+
+#[cfg(feature = "persistent")]
+pub use sundo::{
+    PersistentActions, 
+    PersistentSnapshot,
+    PersistentUndoRedo, 
+    PersistentUndoRedoBuilder,
+    PersistentScopedTransaction,
 };
 
 #[cfg(test)]

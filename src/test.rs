@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::sundo::{Actions, UndoRedo, Tenses, Persistent, PersistentActions, PersistentUndoRedo};
+    use crate::sundo::{Actions, UndoRedo, Tenses};
+    
+    #[cfg(feature = "persistent")]
+    use crate::sundo::{Persistent, PersistentActions, PersistentUndoRedo};
 
     #[test]
     fn test_new() {
@@ -427,6 +430,7 @@ mod tests {
         assert_eq!(*undo_redo.present().unwrap(), 0);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_transaction_does_not_overwrite_previous_state() {
         use im::Vector;
@@ -507,6 +511,7 @@ mod tests {
         assert!(result.is_none());
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_replace_current() {
         use im::Vector;
@@ -576,6 +581,7 @@ mod tests {
         assert_eq!(*undo_redo.present().unwrap(), 20);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_replace_current_with_navigation_example() {
         use im::HashMap;
@@ -651,6 +657,7 @@ mod tests {
         assert_eq!(*undo_redo.present().unwrap(), 20);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_replace_current_truncates_future() {
         use im::Vector;
@@ -809,6 +816,7 @@ mod tests {
         assert_eq!(*undo_redo.present().unwrap(), 20);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_modify_current_in_place_basic() {
         use im::Vector;
@@ -829,6 +837,7 @@ mod tests {
         assert_eq!(undo_redo.get_history_len(), 1);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_modify_current_in_place_preserves_redo() {
         use im::Vector;
@@ -860,6 +869,7 @@ mod tests {
         assert_eq!(undo_redo.present().unwrap()[2], 3);  // Original future state
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_modify_current_in_place_complex_modifications() {
         use im::HashMap;
@@ -929,6 +939,7 @@ mod tests {
         assert!(!undo_redo2.can_redo());
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_modify_vs_replace_current_behavior() {
         use im::Vector;
@@ -972,6 +983,7 @@ mod tests {
         assert_eq!(rc1.as_ptr(), rc2.as_ptr());
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_trait_with_im_vector() {
         use im::Vector;
@@ -999,6 +1011,7 @@ mod tests {
         assert_eq!(current.len(), 3);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_trait_with_im_hashmap() {
         use im::HashMap;
@@ -1024,6 +1037,7 @@ mod tests {
         assert_eq!(current.len(), 1);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_custom_persistent_type() {
         use im::{Vector, HashMap};
@@ -1055,6 +1069,7 @@ mod tests {
     // Tests for PersistentUndoRedo (optimized storage)
     // ============================================================================
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_undo_redo_basic() {
         use im::Vector;
@@ -1072,6 +1087,7 @@ mod tests {
         assert_eq!(*current, Vector::from(vec![1, 2, 3]));
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_undo_redo_update() {
         use im::Vector;
@@ -1095,6 +1111,7 @@ mod tests {
         assert_eq!(*current, Vector::from(vec![1, 2, 3, 4]));
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_undo_redo_undo_redo() {
         use im::HashMap;
@@ -1121,6 +1138,7 @@ mod tests {
         assert_eq!(undo_redo.present().unwrap().len(), 2);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_transaction() {
         use im::Vector;
@@ -1147,6 +1165,7 @@ mod tests {
         assert_eq!(current.len(), 3);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_cancel_transaction() {
         use im::Vector;
@@ -1169,6 +1188,7 @@ mod tests {
         assert_eq!(undo_redo.get_history_len(), 1);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_custom_type() {
         use im::{Vector, HashMap};
@@ -1207,6 +1227,7 @@ mod tests {
         assert_eq!(current.users.get(&1), Some(&"Alice".to_string()));
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_go_to() {
         use im::Vector;
@@ -1233,6 +1254,7 @@ mod tests {
         assert_eq!(state.len(), 1);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_get_history() {
         use im::Vector;
@@ -1264,6 +1286,7 @@ mod tests {
         assert_eq!(history[2].tense, Tenses::Future);
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_can_undo_redo() {
         use im::Vector;
@@ -1291,6 +1314,7 @@ mod tests {
         assert!(undo_redo.can_redo());
     }
     
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_no_rc_overhead() {
         use im::Vector;
@@ -1328,7 +1352,10 @@ mod tests {
 
 #[cfg(test)]
 mod scoped_transaction_tests {
-    use crate::sundo::{Actions, PersistentActions, PersistentScopedTransaction, PersistentUndoRedo, ScopedTransaction, UndoRedo};
+    use crate::sundo::{Actions, ScopedTransaction, UndoRedo};
+    #[cfg(feature = "persistent")]
+    use crate::sundo::{PersistentActions, PersistentScopedTransaction, PersistentUndoRedo};
+    #[cfg(feature = "persistent")]
     use im::Vector;
 
     #[test]
@@ -1366,6 +1393,7 @@ mod scoped_transaction_tests {
         assert_eq!(undo_redo.get_history_len(), 1);  // Still just initial state
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_scoped_transaction_commit() {
         let mut undo_redo = PersistentUndoRedo::new();
@@ -1396,6 +1424,7 @@ mod scoped_transaction_tests {
         assert_eq!(undo_redo.get_history_len(), 2);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_scoped_transaction_rollback() {
         let mut undo_redo = PersistentUndoRedo::new();
@@ -1428,7 +1457,10 @@ mod scoped_transaction_tests {
 
 #[cfg(test)]
 mod builder_tests {
-    use crate::sundo::{Actions, PersistentActions, PersistentUndoRedoBuilder, UndoRedoBuilder};
+    use crate::sundo::{Actions, UndoRedoBuilder};
+    #[cfg(feature = "persistent")]
+    use crate::sundo::{PersistentActions, PersistentUndoRedoBuilder};
+    #[cfg(feature = "persistent")]
     use im::Vector;
 
     #[test]
@@ -1516,6 +1548,7 @@ mod builder_tests {
         assert_eq!(*undo_redo.present().unwrap(), 11);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_builder_max_entries() {
         let mut undo_redo = PersistentUndoRedoBuilder::new()
@@ -1605,6 +1638,7 @@ mod builder_tests {
         assert!(footprint >= std::mem::size_of::<Vec<i32>>() + 5 * std::mem::size_of::<i32>());
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_memory_footprint_for_im_vector() {
         use crate::sundo::MemoryFootprint;
@@ -1721,6 +1755,7 @@ mod builder_tests {
         assert_eq!(*undo_redo.present().unwrap(), last_value);
     }
 
+    #[cfg(feature = "persistent")]
     #[test]
     fn test_persistent_with_memory_limits() {
         use crate::sundo::PersistentUndoRedoBuilder;
