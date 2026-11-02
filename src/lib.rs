@@ -191,7 +191,18 @@ pub mod sundo {
     // Standard UndoRedo with Rc wrapping (for any cloneable type)
     // ============================================================================
 
+    /// Stable identity of a history entry.
+    ///
+    /// Indices shift when old entries are pruned or entries are removed; ids
+    /// don't. Ids increase along the history, so an entry can be found again
+    /// later, e.g. to drop it when the change it records is rejected
+    /// elsewhere. Ids are only unique within one history instance and are
+    /// reassigned by `from_snapshot`.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct EntryId(u64);
+
     struct Entry<Payload> {
+        id: EntryId,
         payload: Rc<Payload>,
         description: String,
     }
@@ -203,6 +214,7 @@ pub mod sundo {
         max_entries: Option<usize>,
         max_memory_bytes: Option<usize>,
         current_memory_bytes: usize,
+        next_id: u64,
     }
 
     // ============================================================================
@@ -238,6 +250,7 @@ pub mod sundo {
     /// ```
     #[cfg(feature = "persistent")]
     struct PersistentEntry<Payload> {
+        id: EntryId,
         payload: Payload,  // Store directly, no Rc!
         description: String,
     }
@@ -250,6 +263,7 @@ pub mod sundo {
         max_entries: Option<usize>,
         max_memory_bytes: Option<usize>,
         current_memory_bytes: usize,
+        next_id: u64,
     }
 
     /// Actions trait for persistent data structures.
@@ -505,6 +519,7 @@ pub mod sundo {
                 max_entries: None,
                 max_memory_bytes: None,
                 current_memory_bytes: 0,
+                next_id: 0,
             }
         }
 
@@ -515,7 +530,9 @@ pub mod sundo {
             }
             
             let rc_payload = Rc::new(payload);
+            let id = self.alloc_id();
             self.history.push(Entry {
+                id,
                 payload: Rc::clone(&rc_payload),
                 description,
             });
@@ -601,7 +618,9 @@ pub mod sundo {
                     self.history.truncate(start_pointer + 1);
                     
                     // Push new entry with the final transaction state
+                    let id = self.alloc_id();
                     self.history.push(Entry {
+                        id,
                         payload: final_state,
                         description,
                     });
@@ -704,8 +723,10 @@ pub mod sundo {
         fn from_snapshot(snapshot: Snapshot<Payload>) -> Self {
             let history = snapshot.entries
                 .into_iter()
-                .map(|(payload, description)| Entry { payload, description })
-                .collect();
+                .enumerate()
+                .map(|(i, (payload, description))| Entry { id: EntryId(i as u64), payload, description })
+                .collect::<Vec<_>>();
+            let next_id = history.len() as u64;
             
             Self {
                 history,
@@ -714,6 +735,7 @@ pub mod sundo {
                 max_entries: snapshot.max_entries,
                 max_memory_bytes: snapshot.max_memory_bytes,
                 current_memory_bytes: snapshot.current_memory_bytes,
+                next_id,
             }
         }
         
@@ -733,6 +755,7 @@ pub mod sundo {
                 max_entries: None,
                 max_memory_bytes: None,
                 current_memory_bytes: 0,
+                next_id: 0,
             }
         }
 
@@ -742,7 +765,10 @@ pub mod sundo {
                 self.history.truncate(self.pointer + 1);
             }
             
+            let id = self.alloc_id();
+            
             self.history.push(PersistentEntry {
+                id,
                 payload,  // Store directly, no Rc wrapping!
                 description,
             });
@@ -829,7 +855,9 @@ pub mod sundo {
                     self.history.truncate(start_pointer + 1);
                     
                     // Push new entry with the final transaction state
+                    let id = self.alloc_id();
                     self.history.push(PersistentEntry {
+                        id,
                         payload: final_state,
                         description,
                     });
@@ -928,8 +956,10 @@ pub mod sundo {
         fn from_snapshot(snapshot: PersistentSnapshot<Payload>) -> Self {
             let history = snapshot.entries
                 .into_iter()
-                .map(|(payload, description)| PersistentEntry { payload, description })
-                .collect();
+                .enumerate()
+                .map(|(i, (payload, description))| PersistentEntry { id: EntryId(i as u64), payload, description })
+                .collect::<Vec<_>>();
+            let next_id = history.len() as u64;
             
             Self {
                 history,
@@ -938,6 +968,7 @@ pub mod sundo {
                 max_entries: snapshot.max_entries,
                 max_memory_bytes: snapshot.max_memory_bytes,
                 current_memory_bytes: snapshot.current_memory_bytes,
+                next_id,
             }
         }
     }
@@ -1176,6 +1207,7 @@ pub mod sundo {
                 max_entries: self.max_entries,
                 max_memory_bytes: self.max_memory_bytes,
                 current_memory_bytes: 0,
+                next_id: 0,
             }
         }
     }
@@ -1255,6 +1287,7 @@ pub mod sundo {
                 max_entries: self.max_entries,
                 max_memory_bytes: self.max_memory_bytes,
                 current_memory_bytes: 0,
+                next_id: 0,
             }
         }
     }
@@ -1264,6 +1297,95 @@ pub mod sundo {
         fn default() -> Self {
             Self::new()
         }
+    }
+
+    // ============================================================================
+    // Stable entry ids
+    // ============================================================================
+
+    /// Generates the id-based API for both history types. `$payload` is how a
+    /// payload is handed out (`Rc<T>` for `UndoRedo`, `T` for the persistent one).
+    macro_rules! entry_id_api {
+        ($payload:ty, $wrap:expr) => {
+            fn alloc_id(&mut self) -> EntryId {
+                let id = EntryId(self.next_id);
+                self.next_id += 1;
+                id
+            }
+
+            /// Id of the present entry (where the pointer is).
+            ///
+            /// Right after `push` this is the id of the pushed entry; pruning
+            /// never removes the present entry.
+            pub fn current_id(&self) -> Option<EntryId> {
+                self.history.get(self.pointer).map(|e| e.id)
+            }
+
+            /// Id of the entry at `index`.
+            pub fn id_at(&self, index: usize) -> Option<EntryId> {
+                self.history.get(index).map(|e| e.id)
+            }
+
+            /// Current index of the entry `id`, or `None` if it was pruned,
+            /// removed or truncated away.
+            pub fn index_of(&self, id: EntryId) -> Option<usize> {
+                self.history.binary_search_by_key(&id, |e| e.id).ok()
+            }
+
+            /// Payload of entry `id`, without moving the pointer.
+            pub fn get(&self, id: EntryId) -> Option<&$payload> {
+                self.index_of(id).map(|i| &self.history[i].payload)
+            }
+
+            /// Moves the pointer to the entry `id` (like `go_to`).
+            pub fn go_to_id(&mut self, id: EntryId) -> Option<&$payload> {
+                let index = self.index_of(id)?;
+                self.pointer = index;
+                self.history.get(index).map(|e| &e.payload)
+            }
+
+            /// Replaces the payload of entry `id`, keeping its position and
+            /// description. Returns `false` if the entry does not exist.
+            pub fn replace(&mut self, id: EntryId, payload: T) -> bool {
+                match self.index_of(id) {
+                    Some(index) => {
+                        self.history[index].payload = $wrap(payload);
+                        true
+                    }
+                    None => false,
+                }
+            }
+
+            /// Removes entry `id` from the history and returns its payload.
+            ///
+            /// The pointer keeps pointing at the same entry if it was not the
+            /// removed one; if the present entry is removed, the previous entry
+            /// becomes present. Returns `None` if the entry does not exist or a
+            /// transaction is open (removal would invalidate it).
+            pub fn remove(&mut self, id: EntryId) -> Option<$payload> {
+                if self.transaction_start.is_some() {
+                    return None;
+                }
+                let index = self.index_of(id)?;
+                let entry = self.history.remove(index);
+                if index < self.pointer || (index == self.pointer && self.pointer > 0) {
+                    self.pointer -= 1;
+                }
+                if self.history.is_empty() {
+                    self.pointer = 0;
+                }
+                Some(entry.payload)
+            }
+        };
+    }
+
+    impl<T> UndoRedo<T> {
+        entry_id_api!(Rc<T>, Rc::new);
+    }
+
+    #[cfg(feature = "persistent")]
+    impl<T: Persistent> PersistentUndoRedo<T> {
+        entry_id_api!(T, std::convert::identity);
     }
 
     // ============================================================================
@@ -1465,6 +1587,7 @@ pub mod sundo {
 // Re-export main API items at the root for convenience
 pub use sundo::{
     Actions, 
+    EntryId,
     HistoryEntry,
     MemoryFootprint,
     Persistent, 

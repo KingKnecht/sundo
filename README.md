@@ -18,7 +18,7 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 
 ```toml
 [dependencies]
-sundo = "0.2"
+sundo = "0.2.2"
 ```
 
 ### Cargo features
@@ -150,6 +150,36 @@ undo_redo.replace_current(|state| AppState {
 // Undo still works on todos, navigation stays at Settings
 undo_redo.undo();  // Reverts todo changes, keeps current_page
 ```
+
+### Stable Entry Ids
+
+Indices shift when old entries are pruned; `EntryId`s don't. Use them to find an
+entry again later, e.g. when the change it records is confirmed or rejected by a
+server:
+
+```rust
+use sundo::{Actions, UndoRedo};
+
+let mut undo_redo = UndoRedo::new();
+undo_redo.push(0, "Initial".to_string());
+undo_redo.push(1, "Edit".to_string());
+let edit = undo_redo.current_id().unwrap();
+undo_redo.push(2, "Another edit".to_string());
+
+// The first edit was rejected elsewhere: drop it from the history.
+undo_redo.remove(edit);
+assert_eq!(*undo_redo.present().unwrap(), 2);
+
+// Restore a remembered position, look up or replace an entry.
+let id = undo_redo.current_id().unwrap();
+undo_redo.undo();
+undo_redo.go_to_id(id);
+undo_redo.replace(id, 20);
+```
+
+`current_id`, `id_at`, `index_of`, `get`, `go_to_id`, `replace` and `remove` exist
+on both `UndoRedo` and `PersistentUndoRedo`. `remove` is refused while a
+transaction is open. Ids are reassigned by `from_snapshot`.
 
 ## API Overview
 

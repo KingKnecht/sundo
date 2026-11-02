@@ -1876,3 +1876,153 @@ mod builder_tests {
         assert_eq!(vectors.present().unwrap().len(), 1);
     }
 }
+
+#[cfg(test)]
+mod entry_id_tests {
+    use crate::sundo::{Actions, UndoRedo, UndoRedoBuilder};
+
+    fn history(values: &[i32]) -> UndoRedo<i32> {
+        let mut h = UndoRedo::new();
+        for v in values {
+            h.push(*v, format!("set {v}"));
+        }
+        h
+    }
+
+    #[test]
+    fn ids_follow_entries_not_indices() {
+        let mut h = UndoRedoBuilder::new().with_max_entries(3).build();
+        h.push(0, "0".to_string());
+        let first = h.current_id().unwrap();
+        h.push(1, "1".to_string());
+        let one = h.current_id().unwrap();
+        h.push(2, "2".to_string());
+        h.push(3, "3".to_string()); // prunes entry 0
+        assert_eq!(h.index_of(first), None);
+        assert_eq!(h.index_of(one), Some(0));
+        assert_eq!(*h.get(one).unwrap().as_ref(), 1);
+        assert_eq!(h.id_at(0), Some(one));
+    }
+
+    #[test]
+    fn remove_before_at_and_after_pointer() {
+        let mut h = history(&[0, 1, 2, 3]);
+        let ids: Vec<_> = (0..4).map(|i| h.id_at(i).unwrap()).collect();
+        h.undo(); // present = 2
+
+        // after the pointer: present unchanged
+        assert_eq!(*h.remove(ids[3]).unwrap(), 3);
+        assert_eq!(*h.present().unwrap(), 2);
+        assert!(!h.can_redo());
+
+        // before the pointer: present unchanged, pointer shifts
+        assert_eq!(*h.remove(ids[1]).unwrap(), 1);
+        assert_eq!(*h.present().unwrap(), 2);
+        assert_eq!(h.get_pointer(), 1);
+
+        // the present entry: previous one becomes present
+        assert_eq!(*h.remove(ids[2]).unwrap(), 2);
+        assert_eq!(*h.present().unwrap(), 0);
+
+        assert_eq!(*h.remove(ids[0]).unwrap(), 0);
+        assert!(h.present().is_none());
+        assert_eq!(h.remove(ids[0]), None);
+    }
+
+    #[test]
+    fn remove_first_entry_while_present() {
+        let mut h = history(&[0, 1]);
+        h.undo();
+        let first = h.current_id().unwrap();
+        h.remove(first);
+        assert_eq!(*h.present().unwrap(), 1);
+    }
+
+    #[test]
+    fn remove_refused_during_transaction() {
+        let mut h = history(&[0, 1]);
+        let id = h.current_id().unwrap();
+        h.start_transaction();
+        assert_eq!(h.remove(id), None);
+        h.cancel_transaction();
+        assert!(h.remove(id).is_some());
+    }
+
+    #[test]
+    fn go_to_id_restores_position() {
+        let mut h = history(&[0, 1, 2]);
+        let two = h.current_id().unwrap();
+        h.undo();
+        h.undo();
+        assert_eq!(*h.go_to_id(two).unwrap().as_ref(), 2);
+        assert!(!h.can_redo());
+    }
+
+    #[test]
+    fn replace_keeps_position_and_description() {
+        let mut h = history(&[0, 1, 2]);
+        let one = h.id_at(1).unwrap();
+        assert!(h.replace(one, 10));
+        assert_eq!(*h.get(one).unwrap().as_ref(), 10);
+        assert_eq!(h.get_history().unwrap()[1].description, "set 1");
+        assert_eq!(*h.present().unwrap(), 2);
+    }
+
+    #[test]
+    fn truncated_and_collapsed_entries_lose_their_ids() {
+        let mut h = history(&[0, 1, 2]);
+        let two = h.current_id().unwrap();
+        h.undo();
+        h.push(5, "branch".to_string()); // truncates 2
+        assert_eq!(h.index_of(two), None);
+
+        let before = h.current_id().unwrap();
+        h.start_transaction();
+        h.push(6, "a".to_string());
+        let inner = h.current_id().unwrap();
+        h.push(7, "b".to_string());
+        h.end_transaction("ab".to_string());
+        assert_eq!(h.index_of(inner), None);
+        let collapsed = h.current_id().unwrap();
+        assert!(collapsed > before);
+        assert_eq!(*h.get(collapsed).unwrap().as_ref(), 7);
+    }
+
+    #[test]
+    fn snapshot_roundtrip_assigns_fresh_ids() {
+        let h = history(&[0, 1, 2]);
+        let mut restored = UndoRedo::from_snapshot(h.export_snapshot());
+        let ids: Vec<_> = (0..3).map(|i| restored.id_at(i).unwrap()).collect();
+        assert!(ids.windows(2).all(|w| w[0] < w[1]));
+        restored.push(3, "3".to_string());
+        assert!(restored.current_id().unwrap() > ids[2]);
+    }
+
+    #[cfg(feature = "persistent")]
+    #[test]
+    fn persistent_history_has_the_same_api() {
+        use crate::sundo::{Persistent, PersistentActions, PersistentUndoRedo};
+
+        #[derive(Clone, Debug, PartialEq)]
+        struct Change(u32);
+        impl Persistent for Change {}
+
+        let mut h = PersistentUndoRedo::new();
+        h.push(Change(0), "start".to_string());
+        h.push(Change(1), "edit 1".to_string());
+        let pending = h.current_id().unwrap();
+        h.push(Change(2), "edit 2".to_string());
+
+        // the older edit is rejected elsewhere: drop it, keep the newer one
+        assert_eq!(h.remove(pending), Some(Change(1)));
+        assert_eq!(h.present(), Some(&Change(2)));
+        h.undo();
+        assert_eq!(h.present(), Some(&Change(0)));
+
+        // an undo was rejected: restore the position
+        let newest = h.id_at(1).unwrap();
+        assert_eq!(h.go_to_id(newest), Some(&Change(2)));
+        assert!(h.replace(newest, Change(20)));
+        assert_eq!(h.get(newest), Some(&Change(20)));
+    }
+}
