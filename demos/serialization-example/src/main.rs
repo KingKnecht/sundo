@@ -94,6 +94,9 @@ fn deserialize_snapshot(lines: &[String]) -> Snapshot<Document> {
         pointer,
         transaction_start,
         max_entries,
+        // this demo does not use memory-based limits
+        max_memory_bytes: None,
+        current_memory_bytes: 0,
     }
 }
 
