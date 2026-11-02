@@ -18,7 +18,22 @@ A flexible and efficient undo/redo library for Rust, with first-class support fo
 
 ```toml
 [dependencies]
-sundo = "0.1.0"
+sundo = "0.2"
+```
+
+### Cargo features
+
+| Feature | Default | What it enables |
+|---|---|---|
+| `persistent` | yes | `PersistentUndoRedo` and friends. No dependencies – implement the `Persistent` marker trait for your own snapshot types. |
+| `im` | yes | `Persistent` / `MemoryFootprint` for the [`im`](https://crates.io/crates/im) collections. Implies `persistent`. |
+| `imbl` | no | The same for [`imbl`](https://crates.io/crates/imbl), the maintained fork of `im`. Implies `persistent`. |
+
+Use with `imbl` only, or with your own snapshot type and no collection crate at all:
+
+```toml
+sundo = { version = "0.2", default-features = false, features = ["imbl"] }
+sundo = { version = "0.2", default-features = false, features = ["persistent"] }
 ```
 
 ## Quick Start

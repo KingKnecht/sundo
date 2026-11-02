@@ -63,56 +63,55 @@ pub mod sundo {
         fn memory_footprint(&self) -> usize;
     }
 
-    // Blanket implementations for im crate persistent data structures
-    #[cfg(feature = "persistent")]
-    impl<T: Clone> Persistent for im::Vector<T> {}
-    #[cfg(feature = "persistent")]
-    impl<K: Clone, V: Clone> Persistent for im::HashMap<K, V> {}
-    #[cfg(feature = "persistent")]
-    impl<K: Clone, V: Clone> Persistent for im::OrdMap<K, V> {}
-    #[cfg(feature = "persistent")]
-    impl<T: Clone> Persistent for im::HashSet<T> {}
-    #[cfg(feature = "persistent")]
-    impl<T: Clone> Persistent for im::OrdSet<T> {}
+    // Implementations for the persistent collections of `im` and `imbl`.
+    // Memory footprints are approximate due to structural sharing.
+    #[cfg(any(feature = "im", feature = "imbl"))]
+    macro_rules! persistent_collections {
+        ($krate:ident) => {
+            impl<T: Clone> Persistent for $krate::Vector<T> {}
+            impl<K: Clone, V: Clone> Persistent for $krate::HashMap<K, V> {}
+            impl<K: Clone, V: Clone> Persistent for $krate::OrdMap<K, V> {}
+            impl<T: Clone> Persistent for $krate::HashSet<T> {}
+            impl<T: Clone> Persistent for $krate::OrdSet<T> {}
 
-    // MemoryFootprint implementations for im crate types
-    // These are approximate due to structural sharing
-    #[cfg(feature = "persistent")]
-    impl<T: Clone> MemoryFootprint for im::Vector<T> {
-        fn memory_footprint(&self) -> usize {
-            // Approximate: base size + (length * estimated node overhead)
-            std::mem::size_of::<Self>() + (self.len() * 8)
-        }
+            impl<T: Clone> MemoryFootprint for $krate::Vector<T> {
+                fn memory_footprint(&self) -> usize {
+                    // Approximate: base size + (length * estimated node overhead)
+                    std::mem::size_of::<Self>() + (self.len() * 8)
+                }
+            }
+
+            impl<K: Clone, V: Clone> MemoryFootprint for $krate::HashMap<K, V> {
+                fn memory_footprint(&self) -> usize {
+                    // Approximate: base size + entries * estimated overhead per entry
+                    std::mem::size_of::<Self>() + (self.len() * 32)
+                }
+            }
+
+            impl<K: Clone, V: Clone> MemoryFootprint for $krate::OrdMap<K, V> {
+                fn memory_footprint(&self) -> usize {
+                    std::mem::size_of::<Self>() + (self.len() * 32)
+                }
+            }
+
+            impl<T: Clone> MemoryFootprint for $krate::HashSet<T> {
+                fn memory_footprint(&self) -> usize {
+                    std::mem::size_of::<Self>() + (self.len() * 24)
+                }
+            }
+
+            impl<T: Clone> MemoryFootprint for $krate::OrdSet<T> {
+                fn memory_footprint(&self) -> usize {
+                    std::mem::size_of::<Self>() + (self.len() * 24)
+                }
+            }
+        };
     }
 
-    #[cfg(feature = "persistent")]
-    impl<K: Clone, V: Clone> MemoryFootprint for im::HashMap<K, V> {
-        fn memory_footprint(&self) -> usize {
-            // Approximate: base size + entries * estimated overhead per entry
-            std::mem::size_of::<Self>() + (self.len() * 32)
-        }
-    }
-
-    #[cfg(feature = "persistent")]
-    impl<K: Clone, V: Clone> MemoryFootprint for im::OrdMap<K, V> {
-        fn memory_footprint(&self) -> usize {
-            std::mem::size_of::<Self>() + (self.len() * 32)
-        }
-    }
-
-    #[cfg(feature = "persistent")]
-    impl<T: Clone> MemoryFootprint for im::HashSet<T> {
-        fn memory_footprint(&self) -> usize {
-            std::mem::size_of::<Self>() + (self.len() * 24)
-        }
-    }
-
-    #[cfg(feature = "persistent")]
-    impl<T: Clone> MemoryFootprint for im::OrdSet<T> {
-        fn memory_footprint(&self) -> usize {
-            std::mem::size_of::<Self>() + (self.len() * 24)
-        }
-    }
+    #[cfg(feature = "im")]
+    persistent_collections!(im);
+    #[cfg(feature = "imbl")]
+    persistent_collections!(imbl);
 
     // MemoryFootprint for common primitive types
     impl MemoryFootprint for String {

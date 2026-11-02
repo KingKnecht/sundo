@@ -11,9 +11,15 @@ readme = "README.md"
 exclude = ["demos/", "docs/", ".vscode/", ".gitignore"]
 
 [features]
-default = ["persistent"]
-persistent = ["dep:im"]
+default = ["persistent", "im"]
+# `PersistentUndoRedo` and friends. No dependencies: implement `Persistent` for your own snapshot types.
+persistent = []
+# `Persistent` / `MemoryFootprint` impls for the `im` crate.
+im = ["persistent", "dep:im"]
+# `Persistent` / `MemoryFootprint` impls for the `imbl` crate (the maintained fork of `im`).
+imbl = ["persistent", "dep:imbl"]
 
 [dependencies]
 im = { version = "15.1", optional = true }
+imbl = { version = "7", optional = true }
 
